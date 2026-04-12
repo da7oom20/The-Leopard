@@ -1,0 +1,37 @@
+node_modules/
+.env
+
+# SSL certificates and keys
+*.pem
+*.key
+*.crt
+*.p12
+
+# Logs
+*.log
+logs/
+
+# Environment variants
+.env.local
+.env.production
+.env.*.local
+
+# Docker overrides
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor temp files
+*.swp
+*.bak
+*~
+
+# Test artifacts
+e2e_results*.json
+test-*-report*.md

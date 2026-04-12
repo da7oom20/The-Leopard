@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Smooth scroll and font rendering */
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Focus visible styling for keyboard navigation */
+  *:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Improve selection contrast on dark backgrounds */
+  ::selection {
+    background-color: rgba(99, 102, 241, 0.4);
+    color: #e4e4e7;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-semibold cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950;
+  }
+
+  .btn-green {
+    @apply bg-green-600 text-white border-0 hover:bg-green-700 focus:ring-green-500;
+  }
+
+  .btn-red {
+    @apply bg-red-600 text-white border-0 hover:bg-red-700 focus:ring-red-500;
+  }
+
+  /* Skip link for keyboard users */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:rounded-md focus:outline-none;
+  }
+}
+
+@layer utilities {
+  /* Smooth transitions for interactive elements */
+  .transition-theme {
+    @apply transition-colors duration-150 ease-in-out;
+  }
+}

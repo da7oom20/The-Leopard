@@ -1,0 +1,40 @@
+<svg width="64" height="64" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Left ear -->
+  <path d="M30 22 Q25 12, 32 8 Q38 6, 40 14 Q40 18, 38 22 Z" fill="url(#grad)"/>
+
+  <!-- Right ear -->
+  <path d="M60 14 Q62 6, 68 8 Q75 12, 70 22 Q68 18, 60 14 Z" fill="url(#grad)"/>
+
+  <!-- Head -->
+  <path d="M38 20 Q50 15, 62 20 Q78 28, 78 45 Q78 55, 70 62 Q62 68, 50 70 Q38 68, 30 62 Q22 55, 22 45 Q22 28, 38 20 Z" fill="url(#grad)"/>
+
+  <!-- Body - left flowing curve -->
+  <path d="M28 50 Q18 58, 15 72 Q14 82, 22 90 Q32 96, 45 94 Q42 85, 42 75 Q42 65, 35 58 Q30 52, 28 50 Z" fill="url(#grad)"/>
+
+  <!-- Body - right flowing curve -->
+  <path d="M72 50 Q78 58, 78 68 Q78 80, 70 88 Q60 94, 50 94 Q55 85, 55 75 Q55 65, 62 58 Q68 52, 72 50 Z" fill="url(#grad)"/>
+
+  <!-- Inner body negative space -->
+  <path d="M42 72 Q45 80, 50 85 Q55 80, 58 72 Q58 65, 52 62 Q48 62, 42 65 Q42 68, 42 72 Z" fill="#09090b"/>
+
+  <!-- Eyes -->
+  <ellipse cx="38" cy="38" rx="6" ry="5" fill="#c7d2fe"/>
+  <ellipse cx="38" cy="38" rx="3" ry="4" fill="#09090b"/>
+  <ellipse cx="62" cy="38" rx="6" ry="5" fill="#c7d2fe"/>
+  <ellipse cx="62" cy="38" rx="3" ry="4" fill="#09090b"/>
+
+  <!-- Muzzle highlight -->
+  <path d="M50 45 Q42 50, 42 58 Q44 64, 50 66 Q56 64, 58 58 Q58 50, 50 45 Z" fill="#c7d2fe"/>
+
+  <!-- Nose -->
+  <path d="M47 52 Q50 50, 53 52 Q54 55, 50 57 Q46 55, 47 52 Z" fill="#4c1d95"/>
+
+  <defs>
+    <linearGradient id="grad" x1="15" y1="8" x2="78" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="30%" stop-color="#818cf8"/>
+      <stop offset="60%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+</svg>

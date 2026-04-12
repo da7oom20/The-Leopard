@@ -1,0 +1,28 @@
+{
+  "name": "the-leopard-tests",
+  "version": "5.0.0",
+  "description": "Test suite for The Leopard IOC Search App",
+  "scripts": {
+    "test": "npm run test:api",
+    "test:api": "jest --config jest.config.js --runInBand",
+    "test:api:watch": "jest --config jest.config.js --watch",
+    "test:api:coverage": "jest --config jest.config.js --coverage",
+    "test:e2e": "cypress run --config-file cypress.config.js",
+    "test:e2e:open": "cypress open --config-file cypress.config.js",
+    "test:all": "npm run test:api && npm run test:e2e",
+    "test:health": "jest --config jest.config.js --testPathPattern=health",
+    "test:auth": "jest --config jest.config.js --testPathPattern=auth",
+    "test:search": "jest --config jest.config.js --testPathPattern=search",
+    "test:users": "jest --config jest.config.js --testPathPattern=users",
+    "test:security": "jest --config jest.config.js --testPathPattern=security"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "axios": "^1.6.0",
+    "form-data": "^4.0.0",
+    "cypress": "^13.6.0"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  }
+}

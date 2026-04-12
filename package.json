@@ -1,0 +1,41 @@
+{
+  "name": "the-leopard-ioc-search-app",
+  "version": "5.0.0",
+  "description": "The Leopard - IOC Search & Analysis Platform",
+  "private": true,
+  "scripts": {
+    "start": "docker-compose up -d",
+    "stop": "docker-compose down",
+    "restart": "docker-compose restart",
+    "logs": "docker-compose logs -f",
+    "logs:backend": "docker logs ioc-backend-v5 -f --tail 50",
+    "logs:frontend": "docker logs ioc-frontend-v5 -f --tail 50",
+    "build": "docker-compose build --no-cache",
+    "rebuild": "docker-compose build --no-cache && docker-compose up -d",
+    "test": "cd tests && npm test",
+    "test:install": "cd tests && npm install",
+    "test:api": "cd tests && npm run test:api",
+    "test:e2e": "cd tests && npm run test:e2e",
+    "test:e2e:open": "cd tests && npm run test:e2e:open",
+    "test:all": "cd tests && npm run test:all",
+    "test:health": "cd tests && npm run test:health",
+    "test:coverage": "cd tests && npm run test:api:coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/da7oom20/the-leopard"
+  },
+  "keywords": [
+    "ioc",
+    "threat-hunting",
+    "siem",
+    "security",
+    "soc",
+    "threat-intelligence"
+  ],
+  "author": "Abdulrahman Almahameed",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

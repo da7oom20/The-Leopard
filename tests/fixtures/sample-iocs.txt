@@ -1,0 +1,53 @@
+# Sample IOC file for testing
+# This file contains various IOC types for search testing
+
+# IP Addresses
+192.168.1.1
+10.0.0.1
+8.8.8.8
+1.1.1.1
+
+# Obfuscated IPs
+192[.]168[.]1[.]100
+10[.]10[.]10[.]10
+
+# Domains
+google.com
+microsoft.com
+evil-malware-domain.com
+suspicious.example.org
+
+# Obfuscated Domains
+malicious[.]domain[.]com
+bad[dot]actor[dot]net
+
+# URLs
+https://example.com/malware.exe
+http://phishing-site.com/login
+hxxp://evil[.]com/payload
+hxxps://bad-site[.]org/download
+
+# MD5 Hashes
+d41d8cd98f00b204e9800998ecf8427e
+098f6bcd4621d373cade4e832627b4f6
+5d41402abc4b2a76b9719d911017c592
+
+# SHA1 Hashes
+da39a3ee5e6b4b0d3255bfef95601890afd80709
+a94a8fe5ccb19ba61c4c0873d391e987982fbbd3
+
+# SHA256 Hashes
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+
+# Email Addresses
+user@example.com
+admin@malicious-domain.com
+phisher[at]evil[dot]com
+
+# Filenames
+malware.exe
+suspicious.dll
+payload.ps1
+backdoor.php
+trojan.doc

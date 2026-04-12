@@ -1,0 +1,119 @@
+services:
+  mysql-v5:
+    image: mysql:8.0
+    restart: unless-stopped
+    container_name: mysql-v5
+    ports:
+      - '127.0.0.1:3316:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
+      MYSQL_DATABASE: ${DB_NAME:-iocdb}
+    volumes:
+      - mysql_data_v5:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - backend
+
+  backend-v5:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: ioc-backend-v5
+    restart: unless-stopped
+    expose:
+      - "4000"
+    environment:
+      DB_HOST: mysql-v5
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      DB_NAME: ${DB_NAME:-iocdb}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env file}
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      CORS_ORIGIN: '*'
+      NO_PROXY: localhost,127.0.0.1,frontend-v5,mysql-v5
+    depends_on:
+      mysql-v5:
+        condition: service_healthy
+    command: ["./wait-for-mysql.sh", "npm", "start"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/api/setup/status', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - backend
+      - frontend
+
+  frontend-v5:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: /api
+    container_name: ioc-frontend-v5
+    restart: unless-stopped
+    ports:
+      - '0.0.0.0:3000:3000'
+      - '0.0.0.0:3080:3080'
+    depends_on:
+      - backend-v5
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - frontend
+      - backend
+
+networks:
+  backend:
+  frontend:
+
+volumes:
+  mysql_data_v5:
