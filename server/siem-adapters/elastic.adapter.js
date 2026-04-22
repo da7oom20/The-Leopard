@@ -176,8 +176,14 @@ class ElasticAdapter extends BaseSiemAdapter {
    * @returns {Object} - Elasticsearch query
    */
   buildQuery(filterType, values, options = {}) {
-    const { minutesBack = 5, customFields, customQueryTemplate } = options;
-    const indexPattern = options.indexPattern || this.indexPattern;
+    const { minutesBack = 5, logSources, customFields, customQueryTemplate } = options;
+    let indexPattern = options.indexPattern || this.indexPattern;
+    if (Array.isArray(logSources) && logSources.length > 0) {
+      const names = logSources
+        .map(ls => (ls?.name ?? ls?.id ?? '').toString().trim())
+        .filter(Boolean);
+      if (names.length > 0) indexPattern = names.join(',');
+    }
 
     // Use custom fields from Recon if available, otherwise hardcoded defaults
     const fields = customFields || this.fieldMappings[filterType] || [];

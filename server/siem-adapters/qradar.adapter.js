@@ -172,7 +172,7 @@ class QRadarAdapter extends BaseSiemAdapter {
    * @returns {Object} - QRadar search configuration
    */
   buildQuery(filterType, values, options = {}) {
-    const { minutesBack = 5, customFields, customQueryTemplate } = options;
+    const { minutesBack = 5, logSources, customFields, customQueryTemplate } = options;
 
     // Escape values for AQL
     const escapedValues = values.map(v => this.escapeForAQL(v));
@@ -191,15 +191,27 @@ class QRadarAdapter extends BaseSiemAdapter {
       });
     }).join(' OR ');
 
+    // Optional log-source scoping via AQL
+    let logSourceClause = '';
+    if (Array.isArray(logSources) && logSources.length > 0) {
+      const ids = logSources
+        .map(ls => parseInt(ls?.id ?? ls?.listId, 10))
+        .filter(n => Number.isFinite(n));
+      if (ids.length > 0) {
+        logSourceClause = ` AND logsourceid IN (${ids.join(', ')})`;
+      }
+    }
+
     let aqlQuery;
     if (customQueryTemplate) {
       aqlQuery = customQueryTemplate
         .replace(/\{\{fieldConditions\}\}/g, conditions)
         .replace(/\{\{minutesBack\}\}/g, String(minutesBack))
+        .replace(/\{\{logSourceFilter\}\}/g, logSourceClause)
         .replace(/\{\{values\}\}/g, escapedValues.map(v => `'${v}'`).join(', '));
       console.log(`🔧 [QRADAR] Using custom AQL: ${aqlQuery.substring(0, 200)}`);
     } else {
-      aqlQuery = `SELECT * FROM events WHERE (${conditions}) LAST ${minutesBack} MINUTES`;
+      aqlQuery = `SELECT * FROM events WHERE (${conditions})${logSourceClause} LAST ${minutesBack} MINUTES`;
     }
 
     return {

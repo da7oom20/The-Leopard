@@ -98,25 +98,345 @@ class LogRhythmAdapter extends BaseSiemAdapter {
   /**
    * Get available log sources from LogRhythm (for Recon)
    */
+  /**
+   * Fetch the LR entity tree. Used by getLogSources() to resolve each log
+   * source's root entity — the log-sources endpoint only carries the leaf id.
+   */
+  async getEntitiesMap() {
+    const map = new Map();
+
+    // LR's /lr-admin-api/entities shape changes by version. Try several
+    // request shapes and merge whatever returns data. The goal is a flat
+    // id → { name, parentEntityId } table for every entity in the tree.
+    const strategies = [
+      { label: 'header parentEntityId=-1',
+        req: { headers: { ...this.getAuthHeaders(), parentEntityId: '-1', count: '5000' } } },
+      { label: 'header parentEntityId=0',
+        req: { headers: { ...this.getAuthHeaders(), parentEntityId: '0',  count: '5000' } } },
+      { label: 'param parentEntityId=-1',
+        req: { headers: this.getAuthHeaders(), params: { parentEntityId: -1, count: 5000 } } },
+      { label: 'param parentEntityId=0',
+        req: { headers: this.getAuthHeaders(), params: { parentEntityId: 0,  count: 5000 } } },
+      { label: 'bare',
+        req: { headers: this.getAuthHeaders(), params: { count: 5000 } } }
+    ];
+
+    const ingest = (arr) => {
+      let added = 0;
+      for (const e of arr) {
+        if (e && e.id != null && !map.has(e.id)) {
+          map.set(e.id, {
+            id: e.id,
+            name: e.name || null,
+            fullName: e.fullName || null,
+            parentEntityId:
+              e.parentEntityId
+              ?? e.parentEntityID
+              ?? e.parent_entity_id
+              ?? e.parentId
+              ?? e.parent?.id
+              ?? null,
+            rootEntityName:
+              e.rootEntityName
+              ?? e.root?.name
+              ?? null
+          });
+          added += 1;
+        }
+      }
+      return added;
+    };
+
+    for (const { label, req } of strategies) {
+      try {
+        const response = await this.makeRequest({
+          method: 'GET',
+          url: `${this.config.apiHost}/lr-admin-api/entities`,
+          timeout: 30000,
+          ...req
+        });
+        const raw = response.data;
+        const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+        if (response.status >= 400) {
+          console.warn(`[LR] entities ${label}: HTTP ${response.status} body=${JSON.stringify(raw).slice(0, 200)}`);
+          continue;
+        }
+        const added = ingest(arr);
+        console.log(`[LR] entities ${label}: status=${response.status} returned=${arr.length} added=${added} total=${map.size}`);
+        if (arr.length > 0) {
+          // Dump the exact shape of the first entity so we see what fields LR uses.
+          console.log(`[LR] entities sample keys=${Object.keys(arr[0]).join(',')} sample=${JSON.stringify(arr[0]).slice(0, 400)}`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[LR] entities ${label} threw: ${err.message}`);
+      }
+    }
+
+    // If we got top-level entities but no children (common when LR only
+    // lists siblings of the given parent), recurse to fetch children per
+    // known entity. Bounded by map.size and a depth guard.
+    if (map.size > 0 && map.size < 2000) {
+      const toExpand = [...map.keys()];
+      for (const parentId of toExpand) {
+        try {
+          const response = await this.makeRequest({
+            method: 'GET',
+            url: `${this.config.apiHost}/lr-admin-api/entities`,
+            headers: { ...this.getAuthHeaders(), parentEntityId: String(parentId), count: '5000' },
+            timeout: 15000
+          });
+          if (response.status >= 400) continue;
+          const raw = response.data;
+          const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+          for (const e of arr) {
+            if (e && e.id != null && !map.has(e.id)) {
+              map.set(e.id, {
+                id: e.id,
+                name: e.name || null,
+                parentEntityId: e.parentEntityId ?? e.parentId ?? parentId,
+                rootEntityName: e.rootEntityName || null
+              });
+            }
+          }
+        } catch { /* ignore per-parent failure */ }
+      }
+      console.log(`[LR] entities after child expansion: total=${map.size}`);
+    }
+
+    return map;
+  }
+
+  /** Walk up the entity tree from a given id until we find the root. */
+  resolveRootEntity(entityById, entityId) {
+    if (entityId == null) return null;
+    let cur = entityById.get(entityId);
+    const seen = new Set();
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      const parentId = cur.parentEntityId;
+      if (parentId == null || parentId === 0 || !entityById.has(parentId)) {
+        return cur;
+      }
+      cur = entityById.get(parentId);
+    }
+    return cur || null;
+  }
+
+  /**
+   * Derive the logical "root" entity name by splitting on hierarchy
+   * separators. Most LR deployments don't populate parentEntityId on the
+   * entities API, so we fall back to the naming convention:
+   *   "HRC-Linux Devices"           → "HRC"
+   *   "SD - Cloud - Security Ctrl"  → "SD"
+   *   "Parent/Child"                → "Parent"
+   *   "HRC"                         → "HRC"
+   */
+  deriveRootName(entityName, fullName) {
+    const candidate = (fullName || entityName || '').trim();
+    if (!candidate) return null;
+    // Split on "/" (formal hierarchy), "-" (with optional surrounding spaces), or "_"
+    const parts = candidate.split(/\s*\/\s*|\s+-\s+|-|_/).map(p => p.trim()).filter(Boolean);
+    return parts[0] || candidate;
+  }
+
   async getLogSources() {
+    try {
+      // Pull entity tree in parallel with the first page of log sources.
+      const entitiesMapPromise = this.getEntitiesMap();
+
+      // Page through log sources (LR paginates at count=1000 typically).
+      const all = [];
+      const PAGE = 1000;
+      let offset = 0;
+      let firstStatus = null;
+      // Safety stop at 50 pages (50k sources).
+      for (let page = 0; page < 50; page++) {
+        const response = await this.makeRequest({
+          method: 'GET',
+          url: `${this.config.apiHost}/lr-admin-api/logsources`,
+          headers: this.getAuthHeaders(),
+          params: { count: PAGE, offset },
+          timeout: 60000
+        });
+        if (firstStatus == null) firstStatus = response.status;
+        const raw = response.data;
+        const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+        all.push(...arr);
+        if (arr.length < PAGE) break;
+        offset += PAGE;
+      }
+      const arr = all;
+      console.log(`[LR] /lr-admin-api/logsources status=${firstStatus} totalFetched=${arr.length}`);
+
+      const entityById = await entitiesMapPromise;
+
+      // Log the shape of the first source's entity block so we can see what LR actually returns.
+      if (arr.length > 0) {
+        try {
+          const sample = arr[0];
+          console.log(`[LR] logsources sample entity keys=${
+            sample?.entity && typeof sample.entity === 'object' ? Object.keys(sample.entity).join(',') : typeof sample?.entity
+          } rawEntity=${JSON.stringify(sample?.entity).slice(0, 250)}`);
+        } catch { /* ignore */ }
+      }
+
+      // Extract leaf + root entity names. LR's log-source payload only gives
+      // us {id, name}, so we use the entity tree we fetched separately to
+      // walk from the leaf up to the root. Tolerant fallbacks for older API
+      // shapes stay in place in case a deployment ships richer entity data.
+      const extractEntity = (s) => {
+        const e = s?.entity;
+        let leaf = null;
+        let root = null;
+        let leafId = null;
+
+        if (e && typeof e === 'object') {
+          leafId = e.id ?? null;
+          leaf = e.name || e.fullName || null;
+          root = e.rootEntityName
+              || e.rootName
+              || e.root?.name
+              || e.parentEntityName
+              || e.parent?.name
+              || null;
+          if (!root && typeof e.fullName === 'string' && e.fullName.includes('/')) {
+            const parts = e.fullName.split('/').map(p => p.trim()).filter(Boolean);
+            if (parts.length > 0) {
+              root = parts[0];
+              if (!leaf || leaf === e.fullName) leaf = parts[parts.length - 1];
+            }
+          }
+        } else if (typeof e === 'string') {
+          leaf = e;
+          if (e.includes('/')) {
+            const parts = e.split('/').map(p => p.trim()).filter(Boolean);
+            if (parts.length > 0) {
+              root = parts[0];
+              leaf = parts[parts.length - 1];
+            }
+          }
+        }
+
+        leaf = leaf || s?.entityName || null;
+        root = root || s?.entityRootName || s?.rootEntityName || null;
+
+        // Best source of truth if LR exposes parent links: walk the tree.
+        if (!root && leafId != null && entityById.size > 0) {
+          const leafEnt = entityById.get(leafId);
+          // Only walk if the tree actually carries parent links. Otherwise
+          // we'd return the leaf itself as a fake root.
+          const hasParentLinks = [...entityById.values()].some(v => v.parentEntityId != null);
+          if (hasParentLinks) {
+            const rootEnt = this.resolveRootEntity(entityById, leafId);
+            if (rootEnt) root = rootEnt.name;
+          }
+          // Fill the leaf from the tree if the log-source payload didn't carry a name.
+          if (!leaf && leafEnt) leaf = leafEnt.fullName || leafEnt.name;
+        }
+
+        // Last resort — derive from naming convention (the common LR case).
+        if (!root) {
+          const entFromMap = leafId != null ? entityById.get(leafId) : null;
+          root = this.deriveRootName(leaf, entFromMap?.fullName);
+        }
+
+        root = root || leaf;
+        return { leaf, root };
+      };
+
+      // Diagnostic: how many entities have a non-null parentEntityId?
+      let withParent = 0;
+      for (const v of entityById.values()) { if (v.parentEntityId != null) withParent += 1; }
+      console.log(`[LR] entity map size=${entityById.size} withParentLink=${withParent}`);
+
+      const sampleOut = [];
+      const resolved = arr.map(s => {
+        const numericId = typeof s?.id === 'number' ? s.id : parseInt(s?.id, 10);
+        const { leaf, root } = extractEntity(s);
+        if (sampleOut.length < 8) sampleOut.push({ leafId: s?.entity?.id, leaf, root });
+        return { numericId, leaf, root, s };
+      });
+      console.log(`[LR] resolved entity sample: ${JSON.stringify(sampleOut)}`);
+      const distinctRoots = new Set(resolved.map(r => r.root || '(none)'));
+      console.log(`[LR] distinct roots across ${resolved.length} sources: ${distinctRoots.size} → ${[...distinctRoots].slice(0, 20).join(' | ')}`);
+
+      return resolved.map(({ numericId, leaf, root, s }) => {
+        return {
+          id: Number.isFinite(numericId) ? numericId : String(s?.id ?? ''),
+          listId: Number.isFinite(numericId) ? numericId : null,
+          name: s?.name || `LogSource ${s?.id ?? ''}`,
+          hostName: s?.host?.name || s?.hostName || null,
+          entityName: leaf,
+          entityRootName: root,
+          logSourceTypeName: s?.logSourceType?.name || s?.recordStatusName || s?.logSourceTypeName || null,
+          recordStatusName: s?.recordStatusName || null,
+          type: 'log_source'
+        };
+      });
+    } catch (error) {
+      console.warn('LogRhythm getLogSources error:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get available Log Source Lists from LogRhythm (for Field Mappings admin UI).
+   * These are the objects referenced by queryLogSourceLists during search.
+   * Endpoint: /lr-admin-api/lists — filters server-side to LogSource list type
+   * via the listType query param; also filters client-side as a safety net.
+   */
+  async getLogSourceLists() {
+    // No server-side filter — LR's /lr-admin-api/lists historically expects a
+    // numeric listType header and returns an empty array on a misformed filter,
+    // which is exactly the "0 lists" symptom users hit. Pull everything and
+    // filter client-side, accepting both modern and legacy listType names.
     try {
       const response = await this.makeRequest({
         method: 'GET',
-        url: `${this.config.apiHost}/lr-admin-api/logsources`,
+        url: `${this.config.apiHost}/lr-admin-api/lists`,
         headers: this.getAuthHeaders(),
-        params: { count: 500 },
+        params: { count: 1000 },
         timeout: 30000
       });
 
-      const sources = response.data || [];
-      return (Array.isArray(sources) ? sources : []).map(s => ({
-        id: String(s.id),
-        name: s.name || `LogSource ${s.id}`,
-        type: 'log_source',
-        hostName: s.hostName
-      }));
+      const raw = response.data;
+      const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.items) ? raw.items : []));
+      console.log(`[LR] /lr-admin-api/lists status=${response.status} totalReturned=${arr.length} sampleListTypes=${
+        [...new Set(arr.slice(0, 50).map(l => l?.listType ?? l?.ListType ?? '(missing)'))].join(',')
+      }`);
+
+      // LR calls Log Source Lists "MsgSource" historically; some versions also
+      // use "LogSource". Accept both, plus any listType that's clearly a log
+      // source list. If the filter strips everything, return all lists so the
+      // operator can see what's there and pick anyway.
+      const isLogSourceList = (l) => {
+        const lt = String(l?.listType ?? l?.ListType ?? '').toLowerCase();
+        if (!lt) return false;
+        return lt.includes('msgsource')
+          || lt.includes('msg source')
+          || lt.includes('logsource')
+          || lt.includes('log source')
+          || lt === 'log_source';
+      };
+      const filtered = arr.filter(isLogSourceList);
+      const used = filtered.length > 0 ? filtered : arr;
+      if (filtered.length === 0 && arr.length > 0) {
+        console.warn(`[LR] No list matched a log-source listType — returning all ${arr.length} lists so the operator can review.`);
+      }
+      return used.map(l => {
+        const rawId = l?.id ?? l?.Id ?? l?.guid ?? l?.Guid;
+        const numericId = typeof rawId === 'number' ? rawId : parseInt(rawId, 10);
+        return {
+          id: String(rawId ?? ''),
+          listId: Number.isFinite(numericId) ? numericId : null,
+          name: l?.name ?? l?.Name ?? `List ${rawId ?? ''}`,
+          guid: l?.guid ?? l?.Guid ?? null,
+          listType: l?.listType ?? l?.ListType ?? null
+        };
+      });
     } catch (error) {
-      console.warn('LogRhythm getLogSources error:', error.message);
+      console.warn('LogRhythm getLogSourceLists error:', error.message);
       return [];
     }
   }
@@ -170,7 +490,13 @@ class LogRhythmAdapter extends BaseSiemAdapter {
    * @returns {Object} - LogRhythm search body
    */
   buildQuery(filterType, values, options = {}) {
-    const { minutesBack = 5, logSourceListId, customFields, customQueryTemplate } = options;
+    const { minutesBack = 5, logSourceListId, logSources, customFields, customQueryTemplate } = options;
+    // logSources here are individual LR log sources (from /lr-admin-api/logsources).
+    // The legacy logSourceListId option still maps into queryLogSourceLists.
+    const queryLogSourcesIds = Array.isArray(logSources) && logSources.length > 0
+      ? logSources.map(ls => parseInt(ls?.listId ?? ls?.id, 10)).filter(n => Number.isFinite(n))
+      : [];
+    const queryLogSourceLists = logSourceListId ? [logSourceListId] : [];
     // Use a local copy — never mutate this.searchFields
     const searchFields = {
       ...this.searchFields,
@@ -211,8 +537,8 @@ class LogRhythmAdapter extends BaseSiemAdapter {
       repositoryPattern: '^logs-.*',
       ownerId: 0,
       searchId: 1000000000,
-      queryLogSourceLists: logSourceListId ? [logSourceListId] : [],
-      queryLogSources: [],
+      queryLogSourceLists,
+      queryLogSources: queryLogSourcesIds,
       logRepositoryIds: [],
       refreshRate: 0,
       isRealTime: false,

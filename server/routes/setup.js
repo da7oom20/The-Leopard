@@ -6,10 +6,13 @@ const router = express.Router();
 const User = require('../models/User');
 const ApiKey = require('../models/ApiKey');
 const AppSetting = require('../models/AppSetting');
+const MsgSource = require('../models/MsgSource');
 const sequelize = require('../db');
 const { getSiemAdapter } = require('../siem-adapters');
 const { classifySiemError, setRequireSearchAuth } = require('../middleware');
 const { validatePassword } = require('../utils/password');
+const { child } = require('../utils/logger');
+const log = child({ area: 'setup' });
 
 // Check setup status
 router.get('/status', async (req, res) => {
@@ -37,6 +40,11 @@ router.get('/status', async (req, res) => {
       adminCreated: false
     });
   }
+});
+
+router.use((req, res, next) => {
+  log.debug(`${req.method} ${req.path}`, { request: req.requestId });
+  next();
 });
 
 // Test database connection
@@ -73,9 +81,14 @@ router.post('/test-db', async (req, res) => {
 
     await sequelize.authenticate();
     await sequelize.sync({ alter: true });
+    log.info('db test passed', { request: req.requestId });
     res.json({ success: true, message: 'Database connection successful and schema synced' });
   } catch (err) {
-    console.error('Database connection test failed:', err.message);
+    log.error('db test failed', {
+      request: req.requestId,
+      error: err.message,
+      hint: 'Check DB_HOST/DB_USER/DB_PASSWORD in docker-compose.yml and that mysql-v5 is healthy.'
+    });
     res.json({ success: false, message: 'Database connection failed' });
   }
 });
@@ -134,9 +147,10 @@ router.post('/add-siem', async (req, res) => {
       isActive: true
     });
 
+    log.info('SIEM connection saved', { request: req.requestId, client, siemType, apiHost, verifySSL: verifySSL !== false });
     res.status(201).json({ success: true, message: 'SIEM connection added' });
   } catch (err) {
-    console.error('Setup add-siem error:', err.message);
+    log.error('add-siem failed', { request: req.requestId, error: err.message });
     res.status(500).json({ success: false, error: 'Failed to add SIEM connection' });
   }
 });
@@ -175,12 +189,14 @@ router.post('/create-admin', async (req, res) => {
       canManageMappings: true, canManageUsers: true, canManageSecurity: true
     });
 
+    log.info('first admin created', { request: req.requestId, username });
     res.status(201).json({ success: true, message: 'Admin user created' });
   } catch (err) {
     if (err.name === 'SequelizeUniqueConstraintError') {
+      log.warn('create-admin rejected — duplicate username', { request: req.requestId });
       return res.status(400).json({ success: false, error: 'Username already exists' });
     }
-    console.error('Setup create-admin error:', err.message);
+    log.error('create-admin failed', { request: req.requestId, error: err.message });
     res.status(500).json({ success: false, error: 'Failed to create admin user' });
   }
 });
@@ -202,10 +218,20 @@ router.post('/test-siem', async (req, res) => {
       apiHost, apiKey, username, password, port, verifySSL, client: 'setup-test'
     });
 
+    log.info('testing SIEM connection', { request: req.requestId, siemType, apiHost });
     const result = await adapter.testConnection();
     if (result.success) {
+      log.info('SIEM test ok', { request: req.requestId, siemType, apiHost });
       res.json({ success: true, message: result.message, data: result.data });
     } else {
+      log.warn('SIEM test failed', {
+        request: req.requestId,
+        siemType,
+        apiHost,
+        category: result.category || 'connection',
+        reason: result.message,
+        hint: result.suggestion
+      });
       res.status(400).json({
         success: false,
         error: result.message,
@@ -214,7 +240,7 @@ router.post('/test-siem', async (req, res) => {
       });
     }
   } catch (err) {
-    console.error('Setup test-siem error:', err.message);
+    log.error('test-siem error', { request: req.requestId, error: err.message });
     const classified = classifySiemError(err, req.body?.siemType, req.body?.apiHost);
     res.status(400).json({
       success: false,
@@ -222,6 +248,84 @@ router.post('/test-siem', async (req, res) => {
       suggestion: classified.suggestion,
       category: classified.category
     });
+  }
+});
+
+// Fetch live log sources from a SIEM that was just added in setup
+// Body: { client }
+router.post('/list-log-sources', async (req, res) => {
+  try {
+    const userCount = await User.count();
+    if (userCount > 0) {
+      return res.status(403).json({ success: false, error: 'Setup already completed. Use /api/admin/log-sources/:clientId instead.' });
+    }
+    const { client } = req.body || {};
+    if (!client) return res.status(400).json({ success: false, error: 'client is required' });
+
+    const apiKeyObj = await ApiKey.findOne({ where: { client } });
+    if (!apiKeyObj) return res.status(404).json({ success: false, error: `No SIEM connection found for client: ${client}` });
+
+    const siemType = (apiKeyObj.siemType || 'logrhythm').toLowerCase();
+    const adapter = getSiemAdapter(siemType, { ...apiKeyObj.dataValues, client: apiKeyObj.client });
+    log.info('listing log sources', { request: req.requestId, client, siemType });
+    const sources = await adapter.getLogSources();
+    log.info('log sources fetched', { request: req.requestId, client, siemType, count: Array.isArray(sources) ? sources.length : 0 });
+    res.json({ success: true, siemType, sources: Array.isArray(sources) ? sources : [] });
+  } catch (err) {
+    log.error('list-log-sources failed', {
+      request: req.requestId,
+      error: err.message,
+      hint: err.suggestion || 'Ensure the API credentials have permission to list log sources / indexes / agents.'
+    });
+    res.status(400).json({
+      success: false,
+      error: err.message || 'Failed to fetch log sources',
+      suggestion: err.suggestion || 'Verify the SIEM credentials and that the API user can list log sources.',
+      category: err.category || 'connection'
+    });
+  }
+});
+
+// Bulk save log-source mappings for a client during setup
+// Body: { client, mappings: { IP: [{listId,name,guid,listType}, ...], Hash: [...], ... } }
+router.post('/save-log-source-mappings', async (req, res) => {
+  try {
+    const userCount = await User.count();
+    if (userCount > 0) {
+      return res.status(403).json({ success: false, error: 'Setup already completed. Use /api/admin/log-source-mappings instead.' });
+    }
+    const { client, mappings } = req.body || {};
+    if (!client || !mappings || typeof mappings !== 'object') {
+      return res.status(400).json({ success: false, error: 'client and mappings are required' });
+    }
+    const apiKeyObj = await ApiKey.findOne({ where: { client } });
+    if (!apiKeyObj) return res.status(404).json({ success: false, error: `No SIEM connection found for client: ${client}` });
+    const siemType = (apiKeyObj.siemType || 'logrhythm').toLowerCase();
+
+    let written = 0;
+    await sequelize.transaction(async (t) => {
+      await MsgSource.destroy({ where: { client, siemType }, transaction: t });
+      for (const [filterType, list] of Object.entries(mappings)) {
+        if (!Array.isArray(list)) continue;
+        for (const item of list) {
+          await MsgSource.create({
+            client,
+            siemType,
+            filterType,
+            listId: item?.listId != null ? parseInt(item.listId, 10) : (item?.id != null ? parseInt(item.id, 10) : null),
+            guid: item?.guid || null,
+            name: item?.name || null,
+            listType: item?.listType || null
+          }, { transaction: t });
+          written += 1;
+        }
+      }
+    });
+    log.info('log-source mappings saved (setup)', { request: req.requestId, client, written });
+    res.json({ success: true, written });
+  } catch (err) {
+    log.error('save-log-source-mappings failed', { request: req.requestId, error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to save log source mappings' });
   }
 });
 
@@ -239,9 +343,10 @@ router.post('/complete', async (req, res) => {
       setRequireSearchAuth(requireSearchAuth);
     }
 
+    log.info('setup marked complete', { request: req.requestId, requireSearchAuth: requireSearchAuth ?? null });
     res.json({ success: true });
   } catch (err) {
-    console.error('Setup complete check failed:', err.message);
+    log.error('complete failed', { request: req.requestId, error: err.message });
     res.status(500).json({ error: 'Failed to verify setup status.' });
   }
 });

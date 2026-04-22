@@ -61,10 +61,18 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const sequelize = require('./db');
-
-// Log encryption key source
+const { log } = require('./utils/logger');
 const { getKeySource } = require('./utils/crypto');
-console.log(`Encryption key source: ${getKeySource()}${getKeySource() === 'JWT_SECRET' ? ' (set ENCRYPTION_KEY for independent rotation)' : ''}`);
+
+log.info('boot', 'environment validated', {
+  node: process.version,
+  env: process.env.NODE_ENV || 'development',
+  logLevel: process.env.LOG_LEVEL || (process.env.DEBUG_LOG === '1' ? 'debug' : 'info')
+});
+log.info('boot', 'encryption key source', {
+  source: getKeySource(),
+  hint: getKeySource() === 'JWT_SECRET' ? 'set ENCRYPTION_KEY for independent rotation' : undefined
+});
 
 // Models (import to register with Sequelize)
 require('./models/User');
@@ -126,9 +134,12 @@ app.use((req, res, next) => {
 app.use(generalLimiter);
 app.set('trust proxy', 1);
 
-console.log('DB_USER:', process.env.DB_USER);
-console.log('DB_HOST:', process.env.DB_HOST);
-console.log('DB_NAME:', process.env.DB_NAME);
+log.info('boot', 'database config', {
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || '3306',
+  user: process.env.DB_USER,
+  db: process.env.DB_NAME
+});
 
 // ============ MOUNT ROUTES ============
 
@@ -285,25 +296,54 @@ async function migrateCredentials() {
 }
 
 async function initialize() {
-  await sequelize.sync({ alter: true });
-  await cleanDuplicateIndexes();
-  await migrateCredentials();
+  log.info('boot', 'synchronizing database schema');
+  try {
+    await sequelize.sync({ alter: true });
+    log.info('boot', 'schema synchronized');
+  } catch (err) {
+    log.error('boot', 'schema sync failed — tables may be out of date', {
+      error: err.message,
+      hint: 'Check DB connectivity and permissions. Run sync-db from the admin panel after fixing.'
+    });
+    throw err;
+  }
+  try {
+    await cleanDuplicateIndexes();
+    log.debug('boot', 'duplicate indexes cleaned');
+  } catch (err) {
+    log.warn('boot', 'index cleanup failed (non-fatal)', { error: err.message });
+  }
+  try {
+    await migrateCredentials();
+  } catch (err) {
+    log.warn('boot', 'credential migration failed (non-fatal)', { error: err.message });
+  }
   await loadSearchAuthSetting();
-  console.log('Database synchronized');
+  log.info('boot', 'initialization complete — ready to serve', {
+    hint: 'If setup is not complete, point a browser at /setup. Otherwise /login.'
+  });
 }
-initialize();
+initialize().catch(err => {
+  log.error('boot', 'fatal initialization error', { error: err.message });
+  process.exit(1);
+});
 
 // ============ PROCESS ERROR HANDLERS ============
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Promise Rejection:', reason?.message || reason);
+process.on('unhandledRejection', (reason) => {
+  log.error('runtime', 'unhandled promise rejection', {
+    error: reason?.message || String(reason),
+    hint: 'Check recent SIEM calls or DB transactions for a missing await / error handler.'
+  });
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err.message);
-  console.error(err.stack);
+  log.error('runtime', 'uncaught exception', { error: err.message, code: err.code });
+  if (err.stack) process.stderr.write(err.stack + '\n');
   if (err.code === 'ERR_OUT_OF_MEMORY' || err.message?.includes('ENOMEM')) {
-    console.error('Fatal memory error. Exiting...');
+    log.error('runtime', 'fatal memory error — exiting', {
+      hint: 'Raise NODE_OPTIONS --max-old-space-size or reduce concurrent searches.'
+    });
     process.exit(1);
   }
 });
@@ -311,15 +351,12 @@ process.on('uncaughtException', (err) => {
 // ============ START SERVER ============
 
 const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  log.info('boot', 'HTTP server listening', { port: PORT });
 });
 
 async function gracefulShutdown(signal) {
-  console.log(`${signal} received. Shutting down gracefully...`);
-
-  server.close(() => {
-    console.log('HTTP server closed (no new connections)');
-  });
+  log.info('shutdown', 'signal received', { signal });
+  server.close(() => log.info('shutdown', 'HTTP server closed (no new connections)'));
 
   const SHUTDOWN_TIMEOUT = 30000;
   const start = Date.now();
@@ -331,19 +368,19 @@ async function gracefulShutdown(signal) {
 
   let state = getState();
   while ((state.activeSearchCount > 0 || state.activeExportCount > 0 || state.queuedSearches > 0) && (Date.now() - start < SHUTDOWN_TIMEOUT)) {
-    console.log(`Waiting for ${state.activeSearchCount} searches, ${state.activeExportCount} exports, ${state.queuedSearches} queued...`);
+    log.info('shutdown', 'waiting for in-flight work', state);
     await new Promise(r => setTimeout(r, 1000));
     state = getState();
   }
 
   if (state.activeSearchCount > 0 || state.activeExportCount > 0) {
-    console.warn(`Shutdown timeout: ${state.activeSearchCount} searches and ${state.activeExportCount} exports still active. Forcing exit.`);
+    log.warn('shutdown', 'timeout — forcing exit', state);
   } else {
-    console.log('All in-flight operations completed.');
+    log.info('shutdown', 'all in-flight operations completed');
   }
 
-  try { await sequelize.close(); } catch(e) {}
-  console.log('Database connection closed. Goodbye.');
+  try { await sequelize.close(); } catch(e) { /* ignore */ }
+  log.info('shutdown', 'database connection closed — goodbye');
   process.exit(0);
 }
 

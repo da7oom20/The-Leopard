@@ -199,7 +199,7 @@ class SplunkAdapter extends BaseSiemAdapter {
    * @returns {Object} - Splunk search configuration
    */
   buildQuery(filterType, values, options = {}) {
-    const { minutesBack = 5, index = '*', customFields, customQueryTemplate } = options;
+    const { minutesBack = 5, index = '*', logSources, customFields, customQueryTemplate } = options;
 
     // Escape special characters in values for SPL
     const escapedValues = values.map(v => this.escapeForSPL(v));
@@ -211,7 +211,18 @@ class SplunkAdapter extends BaseSiemAdapter {
       return `${field} IN (${valueList})`;
     }).join(' OR ');
 
-    const safeIndex = (index || '*').replace(/[|`;\[\]{}]/g, '');
+    // Resolve index: explicit `index` option wins; else logSources[].name OR'd; else '*'
+    let resolvedIndex = index;
+    if ((!index || index === '*') && Array.isArray(logSources) && logSources.length > 0) {
+      const indexList = logSources
+        .map(ls => (ls?.name ?? ls?.id ?? '').toString().trim())
+        .filter(Boolean)
+        .map(n => n.replace(/[|`;\[\]{}\s"']/g, ''));
+      if (indexList.length > 0) {
+        resolvedIndex = indexList.length === 1 ? indexList[0] : `(${indexList.map(i => `index=${i}`).join(' OR ')})`;
+      }
+    }
+    const safeIndex = (resolvedIndex || '*').toString().replace(/[|`;\[\]{}]/g, '');
 
     let splQuery;
     if (customQueryTemplate) {
@@ -223,7 +234,9 @@ class SplunkAdapter extends BaseSiemAdapter {
         .replace(/\{\{values\}\}/g, escapedValues.map(v => `"${v}"`).join(', '));
       console.log(`🔧 [SPLUNK] Using custom SPL: ${splQuery.substring(0, 200)}`);
     } else {
-      splQuery = `search index=${safeIndex} (${fieldConditions}) | head 1000`;
+      // If safeIndex already contains "index=" (multi-index OR group), use as-is
+      const indexClause = safeIndex.startsWith('(') ? safeIndex : `index=${safeIndex}`;
+      splQuery = `search ${indexClause} (${fieldConditions}) | head 1000`;
     }
 
     return {

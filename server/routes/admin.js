@@ -12,6 +12,7 @@ const SSLConfig = require('../models/SSLConfig');
 const QueryTemplate = require('../models/QueryTemplate');
 const AppSetting = require('../models/AppSetting');
 const AuditLog = require('../models/AuditLog');
+const MsgSource = require('../models/MsgSource');
 const sequelize = require('../db');
 const MFA = require('../utils/mfa');
 const { authenticateToken, requirePermission, validateIdParam, classifySiemError, setRequireSearchAuth, getRequireSearchAuth } = require('../middleware');
@@ -886,5 +887,119 @@ function getDefaultQueryTemplates(siemType) {
   };
   return templates[siemType] || {};
 }
+
+// ============ LOG-SOURCE MAPPINGS (per client / IOC type) ============
+
+// Inline validator for :clientId param (parallels validateIdParam but uses clientId).
+function validateClientIdParam(req, res, next) {
+  const raw = req.params.clientId;
+  const id = parseInt(raw, 10);
+  if (isNaN(id) || id < 1 || String(id) !== String(raw)) {
+    return res.status(400).json({ error: 'Invalid ID parameter' });
+  }
+  req.params.clientId = id;
+  next();
+}
+
+// List live log sources from the SIEM identified by clientId (admin equivalent of /api/recon/log-sources/:clientId)
+router.get('/log-sources/:clientId', authenticateToken, requirePermission('canManageMappings'), validateClientIdParam, async (req, res) => {
+  try {
+    const apiKeyObj = await ApiKey.findByPk(req.params.clientId);
+    if (!apiKeyObj) return res.status(404).json({ error: 'Client not found' });
+    const siemType = (apiKeyObj.siemType || 'logrhythm').toLowerCase();
+    const adapter = getSiemAdapter(siemType, { ...apiKeyObj.dataValues, client: apiKeyObj.client });
+    const sources = await adapter.getLogSources();
+    res.json({ siemType, sources: Array.isArray(sources) ? sources : [] });
+  } catch (err) {
+    console.error('Admin list-log-sources error:', err.message);
+    res.status(400).json({
+      error: err.message || 'Failed to fetch log sources',
+      suggestion: err.suggestion || 'Verify the SIEM credentials and that the API user can list log sources.',
+      category: err.category || 'connection'
+    });
+  }
+});
+
+// List saved log-source mappings for a client (grouped by IOC type)
+router.get('/log-source-mappings/:clientId', authenticateToken, requirePermission('canManageMappings'), validateClientIdParam, async (req, res) => {
+  try {
+    const apiKeyObj = await ApiKey.findByPk(req.params.clientId);
+    if (!apiKeyObj) return res.status(404).json({ error: 'Client not found' });
+    const siemType = (apiKeyObj.siemType || 'logrhythm').toLowerCase();
+    const rows = await MsgSource.findAll({
+      where: { client: apiKeyObj.client, siemType },
+      order: [['filterType', 'ASC'], ['name', 'ASC']]
+    });
+    const grouped = {};
+    for (const r of rows) {
+      if (!grouped[r.filterType]) grouped[r.filterType] = [];
+      grouped[r.filterType].push({
+        id: r.id, listId: r.listId, name: r.name, guid: r.guid, listType: r.listType
+      });
+    }
+    res.json({ client: apiKeyObj.client, siemType, mappings: grouped });
+  } catch (err) {
+    console.error('Admin get log-source-mappings error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch log source mappings' });
+  }
+});
+
+// Bulk replace log-source mappings for a client
+// Body: { clientId, mappings: { IP: [{listId,name,guid,listType}], ... } }
+router.post('/log-source-mappings', authenticateToken, requirePermission('canManageMappings'), async (req, res) => {
+  try {
+    const { clientId, mappings } = req.body || {};
+    if (!clientId || !mappings || typeof mappings !== 'object') {
+      return res.status(400).json({ error: 'clientId and mappings are required' });
+    }
+    const apiKeyObj = await ApiKey.findByPk(clientId);
+    if (!apiKeyObj) return res.status(404).json({ error: 'Client not found' });
+    const siemType = (apiKeyObj.siemType || 'logrhythm').toLowerCase();
+
+    // Partial update: only replace rows for the IOC types present in the payload.
+    const ioctypesInPayload = Object.keys(mappings);
+    let written = 0;
+    await sequelize.transaction(async (t) => {
+      if (ioctypesInPayload.length > 0) {
+        await MsgSource.destroy({
+          where: { client: apiKeyObj.client, siemType, filterType: ioctypesInPayload },
+          transaction: t
+        });
+      }
+      for (const [filterType, list] of Object.entries(mappings)) {
+        if (!Array.isArray(list)) continue;
+        for (const item of list) {
+          await MsgSource.create({
+            client: apiKeyObj.client,
+            siemType,
+            filterType,
+            listId: item?.listId != null ? parseInt(item.listId, 10) : (item?.id != null ? parseInt(item.id, 10) : null),
+            guid: item?.guid || null,
+            name: item?.name || null,
+            listType: item?.listType || null
+          }, { transaction: t });
+          written += 1;
+        }
+      }
+    });
+    res.json({ success: true, written, replacedTypes: ioctypesInPayload });
+  } catch (err) {
+    console.error('Admin save log-source-mappings error:', err.message);
+    res.status(500).json({ error: 'Failed to save log source mappings' });
+  }
+});
+
+// Delete a single mapping row
+router.delete('/log-source-mappings/:id', authenticateToken, requirePermission('canManageMappings'), validateIdParam, async (req, res) => {
+  try {
+    const row = await MsgSource.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Mapping not found' });
+    await row.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Admin delete log-source-mapping error:', err.message);
+    res.status(500).json({ error: 'Failed to delete mapping' });
+  }
+});
 
 module.exports = router;
