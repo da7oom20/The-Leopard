@@ -11,6 +11,8 @@ import SetupWizard from './pages/SetupWizard';
 
 import AuthContext from './context/AuthContext';
 import { SetupProvider, useSetup } from './contexts/SetupContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import ThemeToggle from './components/ThemeToggle';
 import { SESSION_EXPIRED_EVENT } from './utils/apiClient';
 
 /* ---- React Error Boundary ---- */
@@ -28,28 +30,19 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-zinc-900 border border-zinc-700 rounded-lg p-8 text-center">
-            <svg className="mx-auto h-12 w-12 text-red-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            <h1 className="text-xl font-bold text-zinc-100 mb-2">Something went wrong</h1>
-            <p className="text-zinc-400 mb-6">
-              An unexpected error occurred. Try refreshing the page.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => this.setState({ hasError: false, error: null })}
-                className="px-6 py-2 bg-zinc-700 text-white rounded-md hover:bg-zinc-600 transition focus:outline-none focus:ring-2 focus:ring-zinc-500"
-              >
-                Try Again
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                Refresh Page
-              </button>
+        <div className="min-h-screen bg-ink-950 flex items-center justify-center p-6">
+          <div className="card-editorial max-w-md w-full p-10 text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 mb-6 border border-signal-rust/40 text-signal-rust">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+            <span className="eyebrow-amber">Unexpected event</span>
+            <h1 className="mt-3 font-serif text-3xl text-ink-50 leading-tight" style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>Something went wrong.</h1>
+            <p className="mt-3 text-ink-300">An error escaped the boundary. Try again, or refresh the page.</p>
+            <div className="mt-8 flex gap-2 justify-center">
+              <button onClick={() => this.setState({ hasError: false, error: null })} className="btn-ghost">Try Again</button>
+              <button onClick={() => window.location.reload()} className="btn-amber">Refresh Page</button>
             </div>
           </div>
         </div>
@@ -62,19 +55,13 @@ class ErrorBoundary extends React.Component {
 /* ---- 404 Not Found Page ---- */
 function NotFoundPage() {
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-      <div className="max-w-md w-full text-center">
-        <h1 className="text-6xl font-bold text-zinc-600 mb-4">404</h1>
-        <h2 className="text-xl font-semibold text-zinc-100 mb-2">Page Not Found</h2>
-        <p className="text-zinc-400 mb-6">
-          The page you are looking for does not exist or has been moved.
-        </p>
-        <Link
-          to="/"
-          className="inline-block px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          Go to Home
-        </Link>
+    <div className="min-h-screen bg-ink-950 flex items-center justify-center p-6 grain">
+      <div className="max-w-md w-full text-center animate-fade-up">
+        <span className="eyebrow-amber">Off the map</span>
+        <h1 className="mt-3 font-serif italic text-ink-50 text-8xl leading-none" style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>404</h1>
+        <h2 className="mt-4 font-serif text-2xl text-ink-100" style={{ fontVariationSettings: '"opsz" 60' }}>This page is not in the field manual.</h2>
+        <p className="mt-3 text-ink-400 text-sm">The location you tried to reach does not exist or has been moved.</p>
+        <Link to="/" className="btn-amber mt-8 inline-flex">Return Home</Link>
       </div>
     </div>
   );
@@ -96,13 +83,12 @@ function ProtectedRoute({ children, adminOnly = false }) {
   if (!token) return <Navigate to="/login" replace />;
   if (adminOnly && !user?.isAdmin) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-400 mb-4">Access Denied</h1>
-          <p className="text-zinc-400 mb-6">You don't have permission to access this page.</p>
-          <button onClick={() => window.history.back()} className="px-4 py-2 bg-zinc-700 text-white rounded hover:bg-zinc-600">
-            Go Back
-          </button>
+      <div className="min-h-screen bg-ink-950 flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <span className="eyebrow-amber" style={{ color: 'rgb(var(--signal-rust))' }}>Restricted</span>
+          <h1 className="mt-3 font-serif text-3xl text-ink-50" style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>Access denied.</h1>
+          <p className="mt-3 text-ink-400 text-sm">Your operator credentials don't grant access to this section.</p>
+          <button onClick={() => window.history.back()} className="btn-ghost mt-6">Go Back</button>
         </div>
       </div>
     );
@@ -116,13 +102,13 @@ function SetupGuard({ children }) {
   // Still loading setup status
   if (isComplete === null) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <svg className="animate-spin h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      <div className="min-h-screen bg-ink-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <svg className="animate-spin h-6 w-6 text-signal-amber" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+            <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <span className="text-zinc-400 text-sm">Loading...</span>
+          <span className="font-mono text-micro text-ink-500 tracking-eyebrow uppercase">Initializing field manual</span>
         </div>
       </div>
     );
@@ -250,15 +236,17 @@ function AppRoutes() {
     <AuthContext.Provider value={{ token, user, login, logout }}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
       {sessionExpiredMsg && (
-        <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-600 text-white text-center py-3 px-4 text-sm font-medium shadow-lg" role="alert">
+        <div className="fixed top-0 left-0 right-0 z-[100] bg-signal-amber text-white text-center py-2.5 px-4 text-sm font-mono uppercase tracking-eyebrow shadow-editorial" role="alert">
+          <span className="opacity-80 mr-2">Session</span>
           {sessionExpiredMsg}
-          <button onClick={() => setSessionExpiredMsg('')} className="ml-4 text-white/80 hover:text-white font-bold" aria-label="Dismiss">&times;</button>
+          <button onClick={() => setSessionExpiredMsg('')} className="ml-4 text-white/70 hover:text-white" aria-label="Dismiss">×</button>
         </div>
       )}
       {expiryWarning && !sessionExpiredMsg && (
-        <div className="fixed top-0 left-0 right-0 z-[99] bg-yellow-600 text-white text-center py-2 px-4 text-sm font-medium shadow-lg" role="status">
+        <div className="fixed top-0 left-0 right-0 z-[99] bg-signal-warning text-ink-950 text-center py-2 px-4 text-sm font-mono uppercase tracking-eyebrow shadow-editorial" role="status">
+          <span className="opacity-70 mr-2">Notice</span>
           {expiryWarning}
-          <button onClick={() => setExpiryWarning('')} className="ml-4 text-white/80 hover:text-white font-bold" aria-label="Dismiss">&times;</button>
+          <button onClick={() => setExpiryWarning('')} className="ml-4 text-ink-950/70 hover:text-ink-950" aria-label="Dismiss">×</button>
         </div>
       )}
       <div id="main-content">
@@ -301,11 +289,14 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <SetupProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-      </SetupProvider>
+      <ThemeProvider>
+        <SetupProvider>
+          <Router>
+            <AppRoutes />
+            <ThemeToggle />
+          </Router>
+        </SetupProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

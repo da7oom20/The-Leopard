@@ -3,12 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <link rel="icon" type="image/png" href="%PUBLIC_URL%/favicon.png" />
-    <title>The Leopard - IOC Search Platform</title>
+    <title>The Leopard — Threat Intelligence Field Manual</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="IOC Search & Analysis Platform - Multi-SIEM threat hunting" />
-    <meta name="theme-color" content="#09090b" />
+    <meta name="description" content="The Leopard — multi-SIEM IOC search and threat-hunting field manual." />
+    <meta name="theme-color" content="#0c0b09" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Fonts: trimmed to weights actually used.
+         Fraunces variable (opsz 9..144) in roman + italic at 400.
+         Plex Sans 400/500/600/700, Plex Mono 400/500. Loaded
+         asynchronously (media=print + onload swap) so they don't block
+         first paint; the tailwind font stacks fall back to Georgia /
+         system-ui until the web fonts arrive. -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
+    </noscript>
   </head>
-  <body class="bg-zinc-950">
+  <body style="background-color: #0c0b09;">
     <div id="root"></div>
   </body>
 </html>
