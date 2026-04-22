@@ -51,14 +51,13 @@ export function SetupProvider({ children }) {
     setSetupState(prev => ({ ...prev, currentStep: Math.max(0, prev.currentStep - 1) }));
   };
 
+  // Flip local "isComplete" state. The wizard's last step already POSTed
+  // /api/setup/complete with the user's search-auth choice — this context
+  // function just reflects that in local state so the UI updates without
+  // an extra network round-trip.
   const completeSetup = async () => {
-    try {
-      await fetch(`${API_URL}/setup/complete`, { method: 'POST' });
-      setSetupState(prev => ({ ...prev, isComplete: true }));
-      localStorage.setItem('setupComplete', 'true');
-    } catch (err) {
-      console.error('Failed to mark setup complete:', err);
-    }
+    setSetupState(prev => ({ ...prev, isComplete: true }));
+    localStorage.setItem('setupComplete', 'true');
   };
 
   const resetSetup = () => {
