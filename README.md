@@ -1,391 +1,310 @@
-# The Leopard - IOC Search App v5.6
+<div align="center">
 
-A powerful Indicator of Compromise (IOC) search and analysis platform that integrates with multiple SIEM platforms and Threat Intelligence sources. Built for SOC analysts and threat hunters.
+# The Leopard
 
-![Version](https://img.shields.io/badge/version-5.6-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Docker](https://img.shields.io/badge/docker-ready-blue)
+**A multi-SIEM indicator-of-compromise search and threat-hunting platform.**
+
+_Point it at your SIEMs. Drop in IOCs. Get results — or the silence that means you're clean._
+
+[![Version](https://img.shields.io/badge/version-5.7-blue)](#changelog)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-compose-blue)](docker-compose.yml)
+[![Offline](https://img.shields.io/badge/offline%20install-supported-success)](docs/OFFLINE_INSTALL.md)
+
+</div>
 
 ---
 
-## Features
+## What it is
 
-### Multi-SIEM Support
-Search across multiple SIEM platforms simultaneously:
-- **LogRhythm** - Full API integration with log source filtering (Tested)
-- **Splunk** - Search and alert integration (Tested)
-- **IBM QRadar** - AQL query support (Tested)
-- **Elastic/ELK** - Elasticsearch query DSL (Experimental)
-- **Wazuh** - Security event search (Experimental)
-- **ManageEngine** - EventLog Analyzer integration (Experimental)
+The Leopard is a self-hosted console that unifies IOC search across the major SIEM platforms. You drop in a file of indicators (or paste them), pick one or more clients, and it fans the query out to each SIEM in parallel, collects the hits, and files the results in a searchable repository. It also pulls live indicators from 18 threat-intelligence feeds for one-click hunts and includes a field-discovery workflow for deployments where the stock field mappings don't match your schema.
 
-### Threat Intelligence Integration
-Automatically fetch IOCs from 18 threat intel sources:
+It's built for SOC analysts and threat hunters who don't want a separate pane for every SIEM. Written in Node + React, shipped as three Docker containers. The source tree and all runtime components are MIT-licensed and fully operator-controlled.
+
+## Supported SIEMs
+
+| SIEM | Status | Per-SIEM scope |
+| ---- | ------ | -------------- |
+| **LogRhythm** | Tested | Individual log sources (queryLogSources), root-entity grouping |
+| **Splunk** | Tested | Indexes |
+| **IBM QRadar** | Tested | Log source IDs (`logsourceid IN (...)`) |
+| **Elastic / ELK** | Experimental | Index patterns |
+| **Wazuh** | Experimental | Agents (indexer DSL + manager alerts API) |
+| **ManageEngine EventLog Analyzer** | Experimental | `log_source_ids` |
+
+Each adapter accepts the same `logSources: [...]` option, stored per-(client, IOC type) in the admin panel. Empty mapping falls back to "scan everything" on every adapter.
+
+## Supported IOC types
+
+IP · Hash (MD5/SHA1/SHA256) · Domain · URL · Email · FileName. The parser accepts IOCs inline, comma-separated, from PDF/XLSX/CSV/TXT uploads, and in deobfuscated forms (`hxxps://`, `evil[.]com`, etc.).
+
+## Threat Intelligence feeds
 
 | Category | Platforms |
-|----------|-----------|
+| -------- | --------- |
 | API Platforms | AlienVault OTX, MISP, PhishTank |
-| abuse.ch | ThreatFox, URLhaus, MalwareBazaar, Feodo Tracker, SSLBL |
-| IP Blocklists | Blocklist.de, Emerging Threats, Spamhaus DROP, FireHOL, Cisco Talos, CrowdSec |
+| abuse.ch | ThreatFox, URLhaus, MalwareBazaar, Feodo Tracker, SSL Blacklist |
+| IP Blocklists | Blocklist.de, Emerging Threats, Spamhaus DROP, FireHOL L1, Cisco Talos, CrowdSec |
 | C2 & Malware | C2 Intel Feeds, Bambenek C2, DigitalSide |
-
-### Hunt Mode
-One-click threat hunting:
-1. Select a TI source and IOC type
-2. Choose target SIEM clients
-3. Automatically fetch fresh IOCs and search across all SIEMs
-
-### Field Discovery (Recon)
-Intelligent field mapping for custom SIEM configurations:
-- Analyze SIEM logs to discover which fields contain IOC data
-- Approve and save custom field mappings per client
-- Automatic fallback to defaults when no mapping exists
-
-### Search History (Repo)
-Track and export all IOC searches:
-- View past submissions with timestamps
-- Export results as CSV or JSON
-- SSE progress streaming for large exports
-
-### User Management
-Granular permission-based access control with 10 individual permissions:
-
-**Feature Permissions** (default enabled):
-- Search, Hunt, Export, View Repository
-
-**Admin Permissions** (default disabled):
-- Recon, Manage SIEM, Manage TI, Manage Mappings, Manage Users, Manage Security
-
-### Security Features (v5.5+)
-- **MFA (Two-Factor Authentication)** - TOTP with backup codes
-- **Strong Password Policy** - 8+ chars, uppercase, lowercase, digit, special character
-- **Account Lockout** - 5 failed attempts triggers 15-minute lock
-- **Session Invalidation** - Password changes immediately revoke all active tokens
-- **Credential Encryption** - AES-256-GCM with separate ENCRYPTION_KEY for defense-in-depth
-- **Input Length Limits** - Prevents bcrypt DoS (username 100, password 128 chars)
-- **Request Tracing** - UUID `X-Request-ID` on every response
-- **Audit Logging** - All admin actions logged with actor, target, IP, timestamp
-- **SSL/TLS Support** - Self-signed certs auto-generated, custom cert upload
-- **HTTPS Redirect** - HTTP requests redirect to HTTPS (both port 3000 and 3080)
-- **Rate Limiting** - IP-based rate limiting on all endpoints
-- **Security Headers** - Helmet CSP, HSTS, X-Frame-Options, X-Content-Type-Options
-- **Error Sanitization** - No stack traces or internal paths in API responses
-
-### v5.6 Enhancements
-- **Search Progress Tracking** - Real-time SSE progress for IOC searches (per-SIEM status)
-- **Repository Filters** - Filter search history by client, IOC type, hit status, date range
-- **Health Checks** - Docker healthchecks on all containers, nginx health endpoint
-- **Environment Validation** - Startup checks for all required env vars
-- **Nginx Upstream** - Keepalive connections to backend with upstream block
-- **DB Connection Pool Tuning** - Configurable pool via `DB_POOL_*` env vars with monitoring
-- **Custom Error Pages** - Branded 502/503/504 error pages with auto-retry
-- **Reproducible Builds** - `npm ci` for deterministic dependency resolution
-- **Accessibility** - WCAG improvements (aria-hidden, aria-label, aria-labelledby, aria-live, role attributes)
-
-### TI Feed Caching
-- In-memory feed cache with 15-minute TTL
-- Reduces redundant network calls for repeated queries
+| Phishing | OpenPhish |
 
 ---
 
-## Quick Start
+## Screenshots
 
-### Prerequisites
-- Docker & Docker Compose
-- 4GB+ RAM recommended
-- Network access to your SIEM APIs
+<p align="center">
+  <img src="screenshots/01_login_page.png" width="49%" alt="Login" />
+  <img src="screenshots/03_search_page_empty.png" width="49%" alt="Hunt console" />
+</p>
+<p align="center">
+  <img src="screenshots/08_admin_field_mappings.png" width="49%" alt="Field mappings" />
+  <img src="screenshots/13_hunt_modal.png" width="49%" alt="Hunt modal" />
+</p>
 
-### Installation
-
-1. **Clone or extract:**
-```bash
-git clone https://github.com/da7oom20/The-Leopard.git
-cd The-Leopard
-```
-
-2. **Configure environment:**
-```bash
-cp .env.example .env
-# Edit .env — at minimum, set JWT_SECRET to a secure random string
-```
-
-3. **Start the application:**
-```bash
-docker compose up -d
-```
-
-4. **Access the app:**
-```
-HTTPS: https://localhost:3000
-HTTP:  http://localhost:3000 or http://localhost:3080 (both redirect to HTTPS)
-```
-
-5. **Complete the Setup Wizard** to configure your first SIEM and create an admin user.
-
-### Default Ports
-
-| Service | Port | Description |
-|---------|------|-------------|
-| App (HTTPS) | 3000 | Web UI + API (nginx reverse proxy) |
-| App (HTTP) | 3080 | Redirects to HTTPS (also handles HTTP on port 3000) |
-| MySQL | 3316 | Database (localhost only) |
+Full set of screenshots is under [`screenshots/`](screenshots/).
 
 ---
 
-## Configuration
+## Internet, proxies, and the three install paths
 
-### Environment Variables
+This is the single most-asked question when deploying into an enterprise environment, so it's up front.
 
-Create a `.env` file in the root directory:
+### When does The Leopard need the internet?
 
-```env
-# Required
-JWT_SECRET=change-this-to-a-long-random-string
+- **At install time**, the Docker build needs to reach three things:
+  1. **Docker Hub** — to pull `mysql:8.0`, `node:20-slim`, `nginx:alpine`
+  2. **npm registry** — `npm ci` inside the backend and frontend build stages
+  3. **Debian + Alpine package mirrors** — `apt-get install netcat-openbsd` (backend) and `apk add openssl` (frontend)
+- **At runtime**, once the stack is running, the only external host the backend needs to reach is **your SIEM's API**. If the SIEM sits on the same management VLAN as The Leopard, no internet is required at all. Threat-intel feeds that pull from public sources (OTX, abuse.ch, etc.) are optional — turn them off under Admin → TI Sources if you're fully air-gapped.
 
-# Database (defaults work out of the box)
-DB_HOST=mysql-v5
-DB_PORT=3306
-DB_NAME=iocdb
-DB_USER=root
-DB_PASSWORD=your-secure-password
+### Three install paths, one command each
 
-# Optional: separate encryption key for credentials at rest
-ENCRYPTION_KEY=another-long-random-string
+Pick the one that matches your network. All three land at `https://<host>:3000`.
 
-# CORS origin (default: https://localhost:3000)
-CORS_ORIGIN=https://your-domain:3000
+#### 1. Direct internet
 
-# Proxy (if behind corporate firewall)
-HTTP_PROXY=http://proxy.example.com:3128
-HTTPS_PROXY=http://proxy.example.com:3128
+The host can reach Docker Hub, npm, and the OS package mirrors directly.
+
+```bash
+make install
 ```
 
-### SIEM Configuration
+Equivalent to `scripts/install.sh --direct`, which wraps `docker compose up -d --build` with a health wait and a clear final status line. Takes a few minutes on first build, seconds afterward.
 
-Configure SIEMs through the Admin Panel > SIEM Clients tab:
-1. Click **Add SIEM Connection**
-2. Select SIEM type and fill in API host + credentials
-3. **Test Connection** to verify
-4. Save
+#### 2. Through an HTTP proxy (install-time only)
 
-### Threat Intelligence Sources
+The host can only reach the internet via a corporate HTTP proxy.
 
-Admin Panel > TI Sources tab:
-1. Select a platform (OTX, MISP, ThreatFox, etc.)
-2. Enter API keys if required (most feed-based sources need no key)
-3. Test and save
+```bash
+make install-proxy PROXY=http://10.5.13.13:8080
+# with extra bypass list if needed:
+make install-proxy PROXY=http://10.5.13.13:8080 NO_PROXY=10.0.0.0/8,.corp.local
+```
+
+The proxy is used **only** during install — for image pulls and build-time package installs. After the stack is up, the proxy is actively torn out of three independent places so it cannot intercept SIEM requests or container healthchecks at runtime:
+
+1. A **transient systemd drop-in** is written to `/etc/systemd/system/docker.service.d/leopard-install-proxy.conf` so the Docker daemon can pull base images. It's removed and the daemon restarted after the build.
+2. Proxy is passed to `docker compose build` as explicit `--build-arg` flags so `npm ci` / `apt-get` / `apk add` reach their registries. These build args stay in the build stage only — they don't end up in the final image's runtime env.
+3. Any persistent `proxies` block in `~/.docker/config.json` is **backed up and removed** — that block is what causes Docker to auto-inject proxy env vars into every running container, which previously made the backend's SIEM requests come back `501 Not Implemented` and the frontend's busybox-wget healthcheck hit `503`.
+
+As belt-and-suspenders, the `backend-v5` and `frontend-v5` services in `docker-compose.yml` explicitly set `HTTP_PROXY` / `HTTPS_PROXY` / `http_proxy` / `https_proxy` to the empty string and declare a sane `NO_PROXY`. Even a future change leaking proxy into container runtime would be overridden here.
+
+Post-install verification (documented in [`docs/OFFLINE_INSTALL.md`](docs/OFFLINE_INSTALL.md)):
+
+```bash
+systemctl show --property=Environment docker        # must not contain the proxy
+cat ~/.docker/config.json                           # must have no "proxies" key
+docker exec ioc-backend-v5 env | grep -i proxy      # must show empty HTTP_PROXY/http_proxy
+```
+
+#### 3. Fully air-gapped
+
+No internet on the target host at any point. Build a portable bundle once on any machine with Docker Hub access, ship the tarball to the target, and run the installer there.
+
+```bash
+# On an online staging box:
+make bundle
+#  -> dist/leopard-v<sha>-<YYYYMMDD>.tar.gz (+ .sha256 sidecar)
+
+# Copy over (scp, USB, data diode), then on the offline target:
+tar -xzf leopard-v<sha>-<YYYYMMDD>.tar.gz
+cd leopard-v<sha>-<YYYYMMDD>
+./install.sh
+```
+
+The bundle carries `docker save`'d copies of `mysql:8.0`, the backend, and the frontend, plus the compose file, `.env.example`, the full `docs/` folder, and a bundle-internal installer. No outbound network access from the target is required at any point during install.
+
+Full reference, upgrade procedure, and diode-transport notes in [`docs/OFFLINE_INSTALL.md`](docs/OFFLINE_INSTALL.md).
+
+---
+
+## First-run setup
+
+On first boot, `https://<host>:3000` redirects to a six-step wizard:
+
+1. **Welcome** — pick deployment mode (Single SIEM or MSSP/multiple clients).
+2. **Database** — test the MySQL connection. Default config works out of the box.
+3. **SIEM Setup** — add your first SIEM client: type, API host, credentials, SSL verification toggle (leave off for self-signed).
+4. **Log Sources** — pick which indexes / log sources / agents should be queried for each IOC type. Optional; can skip with a warning that searches will scan every source (slow).
+5. **Admin User** — create the first admin account with MFA support.
+6. **Complete** — choose whether login is required to run searches, and go.
+
+After setup, the wizard is idempotent — it can be re-opened from Admin → Setup Wizard, and existing configuration is preserved.
 
 ---
 
 ## Architecture
 
+Three Docker services, one internal network, one shared volume for MySQL.
+
 ```
-The-Leopard/
-├── docker-compose.yml          # Container orchestration
-├── .env                        # Environment configuration
-├── CLAUDE.md                   # Developer documentation
-├── docs/
-│   ├── API.md                  # Complete API reference
-│   └── USER_GUIDE.md           # End-to-end usage guide
-│
-├── frontend/                   # React frontend
-│   ├── Dockerfile              # Multi-stage build
-│   ├── nginx.conf              # HTTPS, reverse proxy, security headers
-│   ├── entrypoint.sh           # Auto-generates self-signed SSL cert
-│   └── src/
-│       ├── App.jsx             # Router, auth context, setup guard
-│       ├── pages/              # LoginPage, UploadPage, AdminPage, RepoPage, SetupWizard
-│       └── components/         # HuntModal, ReconSection, SecurityTab, FieldMappingsTab
-│
-└── server/                     # Node.js/Express backend
-    ├── Dockerfile              # Multi-stage build, non-root user
-    ├── index.js                # Entry point, middleware, initialization
-    ├── middleware.js            # Auth, rate limiting, permissions, concurrency
-    ├── db.js                   # Sequelize/MySQL connection pool
-    ├── models/                 # User, ApiKey, TISource, AuditLog, etc.
-    ├── routes/
-    │   ├── auth.js             # Login, MFA, account lockout
-    │   ├── admin.js            # Users, SIEM, TI, SSL, settings, audit logs
-    │   ├── search.js           # Upload, hunt, export, repo
-    │   ├── recon.js            # Field discovery
-    │   └── setup.js            # First-time setup wizard
-    ├── siem-adapters/          # 6 SIEM adapters (LR, Splunk, QRadar, Elastic, Wazuh, ME)
-    ├── ti-adapters/            # 18 TI sources (3 API + 15 feed-based)
-    └── utils/
-        ├── crypto.js           # AES-256-GCM encryption
-        ├── mfa.js              # TOTP implementation
-        ├── password.js         # Password validation
-        └── audit.js            # Audit logging
+ ┌────────────────────┐      ┌───────────────────┐      ┌──────────────┐
+ │  frontend-v5       │──────│  backend-v5       │──────│  mysql-v5    │
+ │  nginx + CRA build │      │  Node + Express   │      │  mysql:8.0   │
+ │  :3000 (HTTPS)     │      │  :4000 (internal) │      │  :3316→3306  │
+ │  :3080 (HTTP/health)│     │                   │      │  (localhost) │
+ └────────────────────┘      └─────────┬─────────┘      └──────────────┘
+                                       │
+                             outbound HTTPS (only to
+                             your configured SIEMs
+                             + optional TI feeds)
 ```
+
+- **Frontend**: React UI (Tailwind, IBM Plex + Fraunces typography, editorial dark + light themes), served by nginx with a self-signed cert generated on first boot.
+- **Backend**: REST API (`/api/auth`, `/api/setup`, `/api/admin`, `/api/recon`, `/api/hunt`, `/api/upload`, …), per-SIEM adapters, MsgSource mapping, result storage, CSV/JSON exports, structured logger.
+- **Database**: MySQL 8, bound to localhost, schema auto-synced on boot.
+
+See [`docs/API.md`](docs/API.md) for the full REST surface.
 
 ---
 
-## Docker Commands
+## Highlights
+
+- **Seven SIEM adapters** with a uniform query contract. The same IOC list produces a LogRhythm search-task, a Splunk SPL job, a QRadar AQL search, an Elastic DSL, a Wazuh indexer query, or a ManageEngine v2 search — no adapter-specific UI.
+- **Log-source scoping across all SIEMs**. One admin UI, per-(client, IOC type) checkbox selection, per-SIEM terminology (Indexes / Log Sources / Agents). Empty mapping still works — it just means "scan everything."
+- **Entity-root grouping for LogRhythm.** 72 entities collapse to 16 logical roots in the filter ("HRC" pill covers HRC + HRC-Linux Devices + HRC-Security Controls + …).
+- **Hunt Mode**: one click — pick a TI source and IOC type, select client(s), it pulls fresh IOCs and fans the hunt out.
+- **Field Discovery (Recon)**: analyze raw logs from your SIEM to discover which fields actually carry IOCs in your schema, then approve the mappings for search.
+- **Structured logger + troubleshooting runbook**. Every lifecycle event (boot, setup transitions, hunt dispatch, per-SIEM query, shutdown) emits timestamped, level-tagged, area-tagged log lines with `key=value` context. Grep recipes in [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+- **Security built in**: JWT sessions with silent refresh, TOTP MFA, backup codes, encrypted credential storage (AES-256), RBAC permissions, audit log, rate limiting, session invalidation, helmet/CSP headers, optional user-provided TLS cert.
+- **Light + dark editorial theme** with a fixed-position toggle — persists to localStorage, honors `prefers-color-scheme` on first load.
+- **Three install paths** (direct, proxy, offline bundle) — covered above.
+
+---
+
+## Configuration
+
+A `.env.example` ships in the repo. At minimum you need `JWT_SECRET` (a long random string — the installer auto-generates one if you run `scripts/install.sh` or `scripts/install-from-bundle.sh`). Everything else has sensible defaults.
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `JWT_SECRET` | — (required) | HMAC secret for session tokens. Min 16 chars. |
+| `ENCRYPTION_KEY` | derived from `JWT_SECRET` | Separate key for credential encryption if you want rotation decoupled from session secret. |
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | `mysql-v5` / 3306 / root / password / iocdb | Database connection. Change in production. |
+| `DB_POOL_MAX` / `DB_POOL_MIN` | 50 / 5 | Sequelize pool sizing. |
+| `PORT` | 4000 | Backend listen port (inside the container). |
+| `LOG_LEVEL` | `info` | Set to `debug` for verbose adapter-level logs. Alias `DEBUG_LOG=1`. |
+| `CORS_ORIGIN` | `*` in dev | Restrict origins in production. |
+
+Full table: [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md#configuration).
+
+### Default ports
+
+| Service | Port | Exposed |
+| ------- | ---- | ------- |
+| App (HTTPS) | 3000 | `0.0.0.0` |
+| App (HTTP health + redirect) | 3080 | `0.0.0.0` |
+| MySQL | 3316 → 3306 | `127.0.0.1` only |
+| Backend | 4000 | internal (compose network) |
+
+---
+
+## Operations
+
+**Logs** (all containers write to stdout; `docker compose logs` is the single entry point):
 
 ```bash
-# Start all services
-docker compose up -d
-
-# View logs
-docker logs ioc-backend-v5 --tail 50 -f
-docker logs ioc-frontend-v5 --tail 50 -f
-
-# Restart services
-docker restart ioc-backend-v5
-docker restart ioc-frontend-v5
-
-# Rebuild after code changes
-docker compose build --no-cache && docker compose up -d
-
-# Stop all services
-docker compose down
+docker compose logs -f backend-v5              # live tail
+docker logs ioc-backend-v5 | grep '\[ERROR\]'  # errors only
+docker logs -f ioc-backend-v5 | grep -E 'hunt|SIEM search'  # one hunt end-to-end
 ```
 
----
+**Health**: every container declares a native Docker healthcheck; `docker compose ps` shows the current state. The backend exposes `/api/health` (public) and `/api/health?detail=true` (admin-authenticated, returns in-flight counts + pool state).
 
-## API Reference
+**Common issues**: symptom → log signature → fix table in [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). Covers proxy-related 501/503s, LogRhythm entity-API 400s, silent searches with no log-source mapping, SSL cert errors on self-signed SIEMs, shutdown timeouts, and more.
 
-See [docs/API.md](docs/API.md) for the complete API reference covering all endpoints, request/response formats, authentication, and error handling.
-
-### Quick Overview
-
-| Category | Endpoints |
-|----------|-----------|
-| Health | `GET /api/health` |
-| Auth | `POST /api/auth/login`, MFA endpoints |
-| Users | CRUD `/api/admin/users` with password policy |
-| SIEM | CRUD `/api/admin/api-keys`, connection testing |
-| TI Sources | CRUD `/api/admin/ti-sources`, testing |
-| Search | `POST /api/upload`, `POST /api/hunt`, `GET /api/search-events` (SSE) |
-| Export | `GET /export-results`, `GET /api/export-json` |
-| Repo | `GET /api/repo`, `GET /api/repo/filters` |
-| Recon | `POST /api/recon/dig`, field mapping CRUD |
-| Audit Logs | `GET /api/admin/audit-logs` with pagination |
-| Settings | `GET/PUT /api/admin/settings` |
-| SSL | `GET/POST/DELETE /api/admin/ssl` |
+**Bundle updates**: build a new bundle on the online box, copy to target, re-run `./install.sh`. Images reload, compose recreates the containers, no data loss.
 
 ---
 
-## Security Considerations
+## Documentation
 
-- **Set `JWT_SECRET`** — Server refuses to start without it
-- **Change MySQL password** — Update `DB_PASSWORD` in `.env`
-- **Enable MFA** for all admin accounts
-- **Set `CORS_ORIGIN`** — Don't use `*` in production
-- **Set `ENCRYPTION_KEY`** — Separate from JWT_SECRET for defense-in-depth
-- Upload SSL certificates for production HTTPS
-- Keep server time synchronized (required for MFA)
-- Regularly rotate API keys for SIEM and TI integrations
-
-### MFA Troubleshooting
-
-If MFA codes are always invalid:
-1. **Check time sync:** `sudo timedatectl set-ntp true`
-2. **Use backup codes** — Each of the 8 codes works once
-3. **Admin reset:** Admin can reset MFA from Users tab
-4. **Database reset:**
-   ```bash
-   docker exec mysql-v5 mysql -uroot -ppassword iocdb -e \
-     "UPDATE users SET mfaEnabled=0, mfaSecret=NULL WHERE username='admin';"
-   ```
-
----
-
-## Troubleshooting
-
-### Cannot Access Frontend
-- Check containers: `docker compose ps`
-- HTTPS: `https://localhost:3000`, HTTP: `http://localhost:3000` or `http://localhost:3080` (both redirect)
-- Check firewall allows ports 3000 and 3080
-
-### SIEM Connection Failed
-- Verify API endpoint is reachable from Docker container
-- Check API key/token is valid
-- If behind proxy, set HTTP_PROXY/HTTPS_PROXY in `.env`
-
-### Account Locked Out
-- Wait 15 minutes for automatic unlock
-- Or restart the backend container to clear lockout state
-
-### Search Returns No Results
-- Verify log sources are configured for the client
-- Check field mappings match your SIEM's field names
-- Extend the search time range
+- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — end-user workflows, feature walkthroughs, security reference
+- [`docs/API.md`](docs/API.md) — complete REST reference, request IDs, error categories
+- [`docs/OFFLINE_INSTALL.md`](docs/OFFLINE_INSTALL.md) — air-gapped + proxy-assisted install, verification commands
+- [`docs/PROXY_SETUP.md`](docs/PROXY_SETUP.md) — historical proxy/SSL/SIEM-mapping fix log (useful reference if you hit edge cases)
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — log reader's guide + symptom table
 
 ---
 
 ## Development
 
-### Adding a New SIEM Adapter
+```bash
+git clone https://github.com/da7oom20/The-Leopard.git
+cd The-Leopard
+make install                 # or scripts/install.sh --direct
 
-1. Create `server/siem-adapters/your-siem.adapter.js`
-2. Extend `BaseSiemAdapter` class
-3. Implement: `testConnection()`, `buildQuery()`, `executeSearch()`, `pollResults()`, `getLogSources()`, `normalizeResults()`
-4. Register in `server/siem-adapters/index.js`
+# dev loops
+docker compose logs -f       # tail all services
+docker compose build         # rebuild after code changes
+docker compose up -d         # recreate containers
 
-### Adding a New TI Adapter
+# clean rebuild
+docker compose down -v       # drops MySQL volume — wipes data!
+docker compose up -d --build
+```
 
-1. Create `server/ti-adapters/your-platform.adapter.js`
-2. Implement `fetchIOCs(iocType, options)`
-3. Register in `server/ti-adapters/index.js`
+Backend code is plain CommonJS Node with Sequelize. Frontend is CRA + React Router + Tailwind (extended with editorial tokens — see `frontend/tailwind.config.js`). No TypeScript, no build-step complexity beyond what `react-scripts` and the Dockerfiles handle.
+
+### Adding a SIEM adapter
+
+1. Extend `server/siem-adapters/base.adapter.js` — implement `testConnection`, `buildQuery`, `executeSearch`, `pollResults` (async SIEMs), `getLogSources`, `buildReconQuery`, `normalizeResults`.
+2. Accept `logSources: [{id, listId, name}]` in `buildQuery` options and scope the query by it.
+3. Register the adapter in `server/siem-adapters/index.js`.
+4. Add a per-SIEM config block to `frontend/src/pages/AdminPage.jsx`'s `SIEM_CONFIGS` (fields, labels, placeholders).
+5. Add a default query-template row in `admin.js`'s `siem-defaults` handler if you want templating.
+
+The existing six adapters are your reference implementation.
 
 ---
 
-## Version History
+## Security
 
-### v5.6 (Current)
-- Real-time search progress via Server-Sent Events (SSE)
-- Repository filters (client, IOC type, hit status, date range)
-- Docker healthchecks on all containers
-- Environment validation at startup
-- Nginx upstream with keepalive connections
-- Configurable DB connection pool (DB_POOL_* env vars)
-- Separate ENCRYPTION_KEY for credential encryption
-- Custom nginx error pages (502/503/504)
-- Health endpoint with public/admin detail modes
-- Reproducible builds with npm ci
-- NODE_ENV=production in frontend Dockerfile
-- Comprehensive .env.example documentation
-- WCAG accessibility improvements across all components
-- Body size limit (10MB) on nginx proxy
-- HTTP-to-HTTPS redirect on port 3000 (error_page 497)
-- Elastic adapter reads indexPattern from extraConfig
+See [`docs/USER_GUIDE.md#security`](docs/USER_GUIDE.md) for the full model. Summary:
 
-### v5.5
-- Split monolithic server into route modules
-- Strong password policy (8+ chars, complexity requirements)
-- Account lockout (5 failed attempts, 15-minute lock)
-- Session invalidation on password change
-- Input length limits (bcrypt DoS prevention)
-- Error message sanitization
-- HTTPS redirect (HTTP 3080 -> HTTPS 3000)
-- Request ID tracing (X-Request-ID)
-- Audit logging with pagination and filtering
-- TI feed caching (15-minute TTL)
-- SIEM adapter connection timeouts
-- Audit log pagination (page/limit/total)
+- JWT sessions (HS256), 60-minute expiry, silent refresh 5 minutes before expiry.
+- TOTP MFA with Google-Authenticator-compatible QR code setup and eight one-time backup codes.
+- All stored credentials (SIEM API keys, TI keys, MFA secrets) encrypted with AES-256-GCM using a key derived from `JWT_SECRET` (or `ENCRYPTION_KEY` if set separately).
+- RBAC: nine granular permissions (search, hunt, export, view repo, manage SIEM/TI/mappings/users/security).
+- Audit log of every admin action.
+- Rate limiting on login, search, and hunt endpoints.
+- helmet + CSP + X-Frame-Options DENY + HSTS on nginx.
+- Optional custom TLS cert upload for the frontend (drop in .crt + .key; no rebuild needed).
 
-### v5.4
-- Credential encryption at rest (AES-256-GCM)
-- CSP security headers (Helmet)
-- Graceful shutdown (drain in-flight searches)
-- MFA secret encryption
+Report vulnerabilities privately via GitHub to the repo owner.
 
-### v5.0
-- Setup Wizard, dark zinc theme
-- 6 SIEM adapters, 18 TI sources
-- Hunt mode, Recon, Field Mappings
-- MFA, SSL/TLS, permission-based access
-- Docker multi-stage builds, non-root containers
+---
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE).
+
+In short: do what you want with the code, including commercial use, as long as you keep the copyright notice. No warranty.
 
 ---
 
 ## Credits
 
-**Developed by:** Abdulrahman Almahameed
+Developed and maintained by **Abdulrahman Almahameed** ([@da7oom20](https://github.com/da7oom20)).
 
-**GitHub:** [https://github.com/da7oom20](https://github.com/da7oom20)
-
-**The Leopard** - Community Edition v5.6
-
-Happy Hunting!
+Pull requests, issues, and suggestions welcome.
