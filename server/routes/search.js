@@ -17,6 +17,8 @@ const AppSetting = require('../models/AppSetting');
 const { searchLimiter, optionalSearchAuth, acquireSearchSlot, releaseSearchSlot, getRequireSearchAuth } = require('../middleware');
 const { getSiemAdapter } = require('../siem-adapters');
 const { getTiAdapter, getPlatformInfo } = require('../ti-adapters');
+const { child } = require('../utils/logger');
+const log = child({ area: 'search' });
 
 const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024, files: 1 }
@@ -70,7 +72,14 @@ router.get('/settings/search-auth', (req, res) => {
 // ============ HUNT ============
 
 router.post('/hunt', searchLimiter, optionalSearchAuth, async (req, res) => {
-  console.log('Received /api/hunt request');
+  log.info('hunt request received', {
+    request: req.requestId,
+    user: req.user?.username || 'anonymous',
+    tiSourceId: req.body?.tiSourceId,
+    iocType: req.body?.iocType,
+    client: req.body?.client || 'ALL',
+    minutes: req.body?.searchMinutesAgo
+  });
 
   try {
     const { tiSourceId, iocType, client, searchMinutesAgo, feedOptions = {} } = req.body;
@@ -172,7 +181,7 @@ router.post('/hunt', searchLimiter, optionalSearchAuth, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error in /api/hunt:', err);
+    log.error('hunt failed', { request: req.requestId, error: err.message, hint: 'Check SIEM connectivity and recent errors above.' });
     res.status(500).json({
       error: 'Hunt operation failed.',
       suggestion: 'Try again with different feed options, or verify the TI source and SIEM connections.',
@@ -184,7 +193,15 @@ router.post('/hunt', searchLimiter, optionalSearchAuth, async (req, res) => {
 // ============ UPLOAD/SEARCH ============
 
 router.post('/upload', searchLimiter, optionalSearchAuth, upload.single('file'), async (req, res) => {
-  console.log('Received /api/upload request', req.file);
+  log.info('upload request received', {
+    request: req.requestId,
+    user: req.user?.username || 'anonymous',
+    file: req.file?.originalname,
+    fileSize: req.file?.size,
+    hasText: !!req.body?.text,
+    minutes: req.body?.searchMinutesAgo,
+    client: req.body?.client || 'ALL'
+  });
 
   try {
     const { text, password, searchMinutesAgo, client } = req.body;
@@ -300,7 +317,7 @@ router.post('/upload', searchLimiter, optionalSearchAuth, upload.single('file'),
     });
 
   } catch (err) {
-    console.error('Error in /api/upload:', err);
+    log.error('upload failed', { request: req.requestId, error: err.message, hint: 'If the file is PDF/XLSX, verify it is not encrypted or corrupted.' });
     res.status(500).json({
       error: 'Search operation failed.',
       suggestion: 'Try again with fewer IOCs or a shorter search period.',
@@ -776,7 +793,7 @@ async function extractIOCs(text) {
 }
 
 async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onProgress) {
-  console.log("Running logsDigging with multi-SIEM adapter support");
+  const huntStart = Date.now();
   const results = [];
 
   const normalizedGroups = {};
@@ -787,6 +804,15 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
     normalizedGroups[normalized].push(...group);
   }
 
+  const typeSummary = Object.entries(normalizedGroups).map(([t, g]) => `${t}:${g.length}`).join(',');
+  log.info('hunt dispatch', {
+    fileName,
+    user: email,
+    minutes: minutesBack,
+    clients: apiKeys.map(k => k.client).join(','),
+    iocs: typeSummary
+  });
+
   const clientTasks = apiKeys.map(async (apiKeyObj) => {
     const siemType = (apiKeyObj.siemType || 'logrhythm').toLowerCase();
     if (apiKeyObj.isActive === false) return;
@@ -795,7 +821,12 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
     try {
       adapter = getSiemAdapter(siemType, { ...apiKeyObj.dataValues || apiKeyObj, client: apiKeyObj.client });
     } catch (err) {
-      console.error(`Failed to create adapter for ${apiKeyObj.client} (${siemType}):`, err.message);
+      log.error('adapter construction failed', {
+        client: apiKeyObj.client,
+        siemType,
+        error: err.message,
+        hint: 'Check the SIEM connection config in Admin → SIEM Clients.'
+      });
       return;
     }
 
@@ -805,12 +836,26 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
       const startTime = Date.now();
 
       try {
-        let logSourceListId = null;
-        if (siemType === 'logrhythm') {
-          const logSource = await MsgSource.findOne({ where: { client: apiKeyObj.client, filterType } });
-          if (!logSource) { console.warn(`No MsgSource for ${apiKeyObj.client}, type=${filterType}`); continue; }
-          logSourceListId = logSource.listId;
+        const logSourceRows = await MsgSource.findAll({
+          where: { client: apiKeyObj.client, siemType, filterType }
+        });
+        const logSources = logSourceRows.map(r => ({
+          id: r.listId,
+          listId: r.listId,
+          guid: r.guid,
+          name: r.name,
+          listType: r.listType
+        }));
+        if (logSources.length === 0) {
+          log.warn('no log-source mapping — scanning all sources', {
+            client: apiKeyObj.client,
+            siemType,
+            filterType,
+            hint: 'Admin → Field Mappings → Log Source Mapping to narrow the search.'
+          });
         }
+        // LR adapter still accepts the legacy single-id option
+        const logSourceListId = (siemType === 'logrhythm' && logSources[0]?.listId) || null;
 
         let customFields = null;
         try {
@@ -830,21 +875,58 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
           }
         } catch (e) {}
 
-        const query = adapter.buildQuery(filterType, iocs, { minutesBack, logSourceListId, customFields, customQueryTemplate });
+        log.info('SIEM search executing', {
+          client: apiKeyObj.client,
+          siemType,
+          filterType,
+          iocCount: iocs.length,
+          minutes: minutesBack,
+          logSources: logSources.length
+        });
+
+        const query = adapter.buildQuery(filterType, iocs, { minutesBack, logSourceListId, logSources, customFields, customQueryTemplate });
         const searchResult = await adapter.executeSearch(query);
 
         let finalResults = [];
         if (searchResult.taskId && !searchResult.complete) {
           const pollingInterval = adapter.getPollingInterval(minutesBack);
           const maxAttempts = adapter.getRetryLimit(minutesBack);
+          log.debug('polling for async results', {
+            client: apiKeyObj.client,
+            siemType,
+            filterType,
+            taskId: searchResult.taskId,
+            intervalMs: pollingInterval,
+            maxAttempts
+          });
           const pollResult = await adapter.pollResults(searchResult.taskId, { pollingInterval, maxAttempts });
-          if (pollResult.status === 'complete') finalResults = pollResult.results || [];
+          if (pollResult.status === 'complete') {
+            finalResults = pollResult.results || [];
+          } else {
+            log.warn('poll did not complete', {
+              client: apiKeyObj.client,
+              siemType,
+              filterType,
+              status: pollResult.status,
+              reason: pollResult.error,
+              hint: pollResult.status === 'timeout' ? 'Try a smaller time window or fewer IOCs.' : undefined
+            });
+          }
         } else {
           finalResults = searchResult.results || [];
         }
 
         const searchDuration = Date.now() - startTime;
         const hasHit = finalResults.length > 0;
+
+        log.info('SIEM search complete', {
+          client: apiKeyObj.client,
+          siemType,
+          filterType,
+          durationMs: searchDuration,
+          resultCount: finalResults.length,
+          hit: hasHit
+        });
 
         const iocsByType = group.reduce((acc, it) => {
           const rawType = (it.type || '').trim().toLowerCase();
@@ -873,7 +955,14 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
         if (onProgress) onProgress(apiKeyObj.client, filterType, hasHit ? 'hit' : 'no hit');
 
       } catch (err) {
-        console.error(`[${siemType.toUpperCase()}] ${apiKeyObj.client} | ${filterType} | Error:`, err.message);
+        log.error('SIEM search failed', {
+          client: apiKeyObj.client,
+          siemType,
+          filterType,
+          error: err.message,
+          category: err.category,
+          hint: err.suggestion
+        });
         await Result.create({
           client: apiKeyObj.client, siemType, hit: "error", filterType, fileName, email,
           searchDuration: Date.now() - startTime, resultCount: 0,
@@ -885,7 +974,16 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
   });
 
   await Promise.all(clientTasks);
-  console.log("logsDigging complete.");
+  const hitCount = results.filter(r => r.hit === 'hit').length;
+  const errorCount = results.filter(r => r.hit === 'error').length;
+  log.info('hunt dispatch complete', {
+    fileName,
+    durationMs: Date.now() - huntStart,
+    total: results.length,
+    hits: hitCount,
+    noHits: results.length - hitCount - errorCount,
+    errors: errorCount
+  });
   return results;
 }
 

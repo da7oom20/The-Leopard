@@ -236,7 +236,7 @@ class ManageEngineAdapter extends BaseSiemAdapter {
    * @returns {Object} - ManageEngine query parameters
    */
   buildQuery(filterType, values, options = {}) {
-    const { minutesBack = 5, customFields, customQueryTemplate } = options;
+    const { minutesBack = 5, logSources, customFields, customQueryTemplate } = options;
 
     const endTime = new Date();
     const startTime = new Date(Date.now() - minutesBack * 60 * 1000);
@@ -253,11 +253,20 @@ class ManageEngineAdapter extends BaseSiemAdapter {
       queryString = this.buildQueryString(filterType, values, customFields);
     }
 
+    // Resolve logSourceIds: explicit options.logSourceIds wins; else logSources mapping
+    let logSourceIds = options.logSourceIds || [];
+    if (logSourceIds.length === 0 && Array.isArray(logSources) && logSources.length > 0) {
+      logSourceIds = logSources
+        .map(ls => ls?.id ?? ls?.listId)
+        .map(v => (typeof v === 'string' ? (parseInt(v, 10) || v) : v))
+        .filter(v => v !== null && v !== undefined && v !== '');
+    }
+
     return {
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
       query: queryString,
-      logSourceIds: options.logSourceIds || [],
+      logSourceIds,
       logTypes: options.logTypes || [],
       limit: options.limit || 1000,
       filterType,

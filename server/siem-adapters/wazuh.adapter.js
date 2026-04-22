@@ -245,7 +245,7 @@ class WazuhAdapter extends BaseSiemAdapter {
    * @returns {Object} - Wazuh query parameters
    */
   buildQuery(filterType, values, options = {}) {
-    const { minutesBack = 5, customFields, customQueryTemplate } = options;
+    const { minutesBack = 5, logSources, customFields, customQueryTemplate } = options;
 
     // Use custom fields from Recon if available, otherwise hardcoded defaults
     const fields = customFields || this.fieldMappings[filterType] || [];
@@ -253,6 +253,11 @@ class WazuhAdapter extends BaseSiemAdapter {
     // Create OR conditions for all values across all fields (escape double quotes in IOC values)
     const escapedValues = values.map(v => `"${String(v).replace(/"/g, '\\"')}"`);
     const searchTerms = escapedValues.join(' OR ');
+
+    // Optional agent scoping (Wazuh's "log sources" are agents)
+    const agentIds = Array.isArray(logSources)
+      ? logSources.map(ls => String(ls?.id ?? ls?.listId ?? ls?.name ?? '').trim()).filter(Boolean)
+      : [];
 
     let search = searchTerms;
     if (customQueryTemplate) {
@@ -268,7 +273,8 @@ class WazuhAdapter extends BaseSiemAdapter {
       minutesBack,
       filterType,
       searchedValues: values,
-      fields
+      fields,
+      agentIds
     };
   }
 
@@ -303,12 +309,17 @@ class WazuhAdapter extends BaseSiemAdapter {
       }
     });
 
+    const must = [
+      { range: { timestamp: { gte: `now-${query.minutesBack || 1440}m`, lte: 'now' } } }
+    ];
+    if (Array.isArray(query.agentIds) && query.agentIds.length > 0) {
+      must.push({ terms: { 'agent.id': query.agentIds } });
+    }
+
     const dslBody = {
       query: {
         bool: {
-          must: [
-            { range: { timestamp: { gte: `now-${query.minutesBack || 1440}m`, lte: 'now' } } }
-          ],
+          must,
           should: shouldClauses,
           minimum_should_match: 1
         }
@@ -366,7 +377,7 @@ class WazuhAdapter extends BaseSiemAdapter {
         headers: this.getAuthHeaders(),
         params: {
           ...(query.search ? { q: query.search } : {}),
-          ...(query.agentId ? { agents_list: query.agentId } : {}),
+          ...(Array.isArray(query.agentIds) && query.agentIds.length > 0 ? { agents_list: query.agentIds.join(',') } : (query.agentId ? { agents_list: query.agentId } : {})),
           limit: query.limit || 1000,
           sort: '-timestamp'
         },

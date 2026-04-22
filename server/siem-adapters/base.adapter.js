@@ -1,3 +1,6 @@
+const { child } = require('../utils/logger');
+const adapterLog = child({ area: 'siem' });
+
 /**
  * Base SIEM Adapter - Abstract interface for all SIEM implementations
  * All SIEM adapters must extend this class and implement its methods
@@ -94,6 +97,16 @@ class BaseSiemAdapter {
    */
   async getLogSources() {
     throw new Error('getLogSources() must be implemented by subclass');
+  }
+
+  /**
+   * Get available log-source lists (or equivalent "selectable scope" objects)
+   * for the wizard/admin Field Mappings UI. Default: fall back to getLogSources().
+   * LogRhythm overrides this to fetch /lr-admin-api/lists.
+   * @returns {Promise<Array<{id: string, listId?: number, name: string, guid?: string, listType?: string}>>}
+   */
+  async getLogSourceLists() {
+    return this.getLogSources();
   }
 
   /**
@@ -200,10 +213,25 @@ class BaseSiemAdapter {
       defaultConfig.httpsAgent = this._httpsAgent;
     }
 
+    const started = Date.now();
+    const method = (axiosConfig.method || 'GET').toUpperCase();
+    const url = axiosConfig.url || '';
     try {
       const response = await axios({ ...defaultConfig, ...axiosConfig });
+      adapterLog.debug(`${this.name} ${method} ${new URL(url).pathname}`, {
+        client: this.config.client,
+        status: response.status,
+        ms: Date.now() - started
+      });
       return response;
     } catch (error) {
+      adapterLog.warn(`${this.name} ${method} failed`, {
+        client: this.config.client,
+        url,
+        ms: Date.now() - started,
+        code: error.code,
+        reason: error.response?.status || error.message
+      });
       const host = this.config.apiHost || 'unknown host';
       const siemName = (this.name || 'SIEM').charAt(0).toUpperCase() + (this.name || 'siem').slice(1);
 
