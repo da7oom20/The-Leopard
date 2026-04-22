@@ -50,8 +50,11 @@ services:
       HOST: 0.0.0.0
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
       CORS_ORIGIN: '*'
       NO_PROXY: localhost,127.0.0.1,frontend-v5,mysql-v5
+      no_proxy: localhost,127.0.0.1,frontend-v5,mysql-v5
     depends_on:
       mysql-v5:
         condition: service_healthy
@@ -88,6 +91,13 @@ services:
     ports:
       - '0.0.0.0:3000:3000'
       - '0.0.0.0:3080:3080'
+    environment:
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      NO_PROXY: localhost,127.0.0.1,backend-v5,mysql-v5
+      no_proxy: localhost,127.0.0.1,backend-v5,mysql-v5
     depends_on:
       - backend-v5
     healthcheck:
