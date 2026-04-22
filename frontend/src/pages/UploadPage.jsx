@@ -53,12 +53,12 @@ function ClientMultiSelectDropdown({
         type="button"
         ref={btnRef}
         onClick={() => setOpen(v => !v)}
-        className="w-full p-2 border rounded-md bg-zinc-800 text-zinc-100 border-zinc-700 flex justify-between items-center hover:border-zinc-600 transition"
+        className="field-boxed flex justify-between items-center hover:border-signal-amber transition-colors"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="truncate">{summary}</span>
-        <svg className={`w-4 h-4 ml-2 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <span className="truncate text-ink-100">{summary}</span>
+        <svg className={`w-3.5 h-3.5 ml-2 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" />
         </svg>
       </button>
@@ -66,33 +66,33 @@ function ClientMultiSelectDropdown({
       {open && (
         <div
           ref={menuRef}
-          className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-md border border-zinc-700 bg-zinc-800 shadow-lg"
+          className="absolute z-20 mt-1 w-full max-h-64 overflow-auto border border-ink-700 bg-ink-900 shadow-editorial-lg"
           role="listbox"
           tabIndex={-1}
         >
-          <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-zinc-700">
+          <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-ink-800 border-b border-hairline">
             <input
               type="checkbox"
               checked={allClients}
               onChange={(e) => toggleAll(e.target.checked)}
-              className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 border-ink-600 bg-ink-850 text-signal-amber focus:ring-signal-amber rounded-none"
             />
-            <span className="font-medium text-zinc-100">All Clients</span>
+            <span className="font-mono uppercase text-micro tracking-eyebrow text-ink-100">All Clients</span>
           </label>
 
-          <div className={`${allClients ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`${allClients ? 'opacity-40 pointer-events-none' : ''}`}>
             {options.map(c => (
               <label
                 key={c}
-                className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-zinc-700"
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-ink-800"
               >
                 <input
                   type="checkbox"
                   checked={selectedClients.includes(c)}
                   onChange={(e) => toggleOne(c, e.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 border-ink-600 bg-ink-850 text-signal-amber focus:ring-signal-amber rounded-none"
                 />
-                <span className="text-zinc-200">{c}</span>
+                <span className="text-ink-200 text-sm">{c}</span>
               </label>
             ))}
           </div>
@@ -447,183 +447,198 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="flex-1 p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <LeopardLogoCompact size={40} showText={false} />
+    <div className="flex flex-col min-h-screen bg-ink-950 text-ink-50 grain">
+      {/* Editorial header band */}
+      <header className="border-b border-hairline-strong vignette-deep">
+        <div className="max-w-7xl mx-auto px-6 pt-8 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
           <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-              The Leopard
+            <span className="eyebrow-amber">The Leopard · Field Console</span>
+            <h1 className="mt-2 font-serif italic text-5xl leading-none tracking-tight wordmark-gradient"
+                style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
+              Hunt
             </h1>
-            <p className="text-zinc-400 text-xs">IOC Search & Analysis</p>
+            <p className="mt-2 font-mono text-micro text-ink-500 tracking-wider-2">
+              INDICATOR SEARCH · MULTI-SIEM
+            </p>
           </div>
+          <nav className="flex items-center gap-2 flex-wrap" aria-label="Main navigation">
+            <button onClick={() => setHuntOpen(true)} className="btn-amber py-2" aria-label="Open threat hunt modal">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+              </svg>
+              Hunt Mode
+            </button>
+            <button onClick={() => navigate('/repo')} className="btn-ghost py-2">
+              Repo
+            </button>
+            <button onClick={() => navigate('/admin')} className="btn-ghost py-2">
+              Admin
+            </button>
+          </nav>
         </div>
-        <nav className="flex items-center gap-3 flex-wrap" aria-label="Main navigation">
-          <button
-            onClick={() => setHuntOpen(true)}
-            className="px-4 py-2 rounded-md bg-amber-600 text-white hover:bg-amber-700 font-semibold transition focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
-            aria-label="Open threat hunt modal"
-          >
-            Hunt
-          </button>
-          <button
-            onClick={() => navigate('/repo')}
-            className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
-          >
-            Searches Repo
-          </button>
-          <button
-            onClick={() => navigate('/admin')}
-            className="px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700 transition focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
-          >
-            Admin Panel
-          </button>
-        </nav>
-      </div>
+      </header>
+
+      <div className="flex-1 max-w-7xl mx-auto p-6 w-full">
 
       {/* Form */}
-      <form onSubmit={onSubmit} className="space-y-6" aria-label="IOC upload form">
+      <form onSubmit={onSubmit} className="space-y-8 animate-fade-up" aria-label="IOC upload form">
         {/* Period & Client */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="search-period" className="block mb-1 font-medium text-zinc-300">Search Period</label>
-            <select
-              id="search-period"
-              value={searchPeriod}
-              onChange={(e) => setSearchPeriod(Number(e.target.value))}
-              className="w-full p-2 border rounded-md bg-zinc-800 text-zinc-100 border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {searchOptions.map(({ label, value }) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-            {searchPeriod >= 129600 && (
-              <div className="mt-2 p-3 bg-amber-900/50 border border-amber-700 rounded-md">
-                <p className="text-amber-300 text-sm font-medium flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                  Warning: Large Search Period
-                </p>
-                <p className="text-amber-200 text-xs mt-1">
-                  Searching 3+ months of data may take a long time and could timeout. Consider using a shorter period or searching specific clients only.
-                </p>
-              </div>
-            )}
-          </div>
+        <section>
+          <span className="eyebrow">Section · Targeting</span>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="search-period" className="font-mono text-xs uppercase tracking-eyebrow text-ink-400 block mb-2">Search Period</label>
+              <select
+                id="search-period"
+                value={searchPeriod}
+                onChange={(e) => setSearchPeriod(Number(e.target.value))}
+                className="field-boxed"
+              >
+                {searchOptions.map(({ label, value }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              {searchPeriod >= 129600 && (
+                <div className="mt-3 p-3 border-l-2 border-signal-amber bg-signal-amber/8 border-y border-r border-y-hairline border-r-hairline">
+                  <p className="font-mono text-micro tracking-eyebrow text-signal-amber flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.33 16a2 2 0 001.74 3z" />
+                    </svg>
+                    LARGE SEARCH PERIOD
+                  </p>
+                  <p className="text-ink-300 text-xs mt-1.5 leading-relaxed">
+                    Searching 3+ months may run long or time out. Consider a shorter window or fewer clients.
+                  </p>
+                </div>
+              )}
+            </div>
 
-          <div>
-            <label className="block mb-1 font-medium text-zinc-300">Target Clients</label>
-            <ClientMultiSelectDropdown
-              allClients={allClients}
-              setAllClients={setAllClients}
-              selectedClients={selectedClients}
-              setSelectedClients={setSelectedClients}
-              options={clientOptions}
-            />
-            {!allClients && selectedClients.length === 0 && (
-              <div className="text-xs text-yellow-400 mt-2">
-                Select at least one client or toggle "All Clients".
-              </div>
-            )}
+            <div>
+              <label className="font-mono text-xs uppercase tracking-eyebrow text-ink-400 block mb-2">Target Clients</label>
+              <ClientMultiSelectDropdown
+                allClients={allClients}
+                setAllClients={setAllClients}
+                selectedClients={selectedClients}
+                setSelectedClients={setSelectedClients}
+                options={clientOptions}
+              />
+              {!allClients && selectedClients.length === 0 && (
+                <div className="text-xs text-signal-amber mt-2 font-mono uppercase tracking-eyebrow">
+                  Select at least one client or toggle All Clients
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </section>
 
         {/* Upload Areas */}
-        <div className="flex flex-col md:flex-row gap-6">
-          {/* File Upload */}
-          <div className="flex-1 bg-zinc-900 shadow-lg rounded-lg p-6 border border-zinc-700">
-            <h2 className="text-xl font-semibold mb-4 text-zinc-100">Upload File</h2>
-            <label
-              htmlFor="fileUpload"
-              className={`block cursor-pointer border-2 border-dashed rounded-md p-8 text-center transition-colors ${
-                dragActive
-                  ? 'border-indigo-500 bg-indigo-900/20 text-indigo-400'
-                  : 'border-zinc-700 text-zinc-400 hover:border-indigo-500 hover:text-indigo-400'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              {file ? (
-                <div>
-                  <svg className="mx-auto h-8 w-8 text-indigo-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                  </svg>
-                  <p className="text-zinc-200 font-medium">{file.name}</p>
-                </div>
-              ) : (
-                <>
-                  <svg className="mx-auto h-10 w-10 text-zinc-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                  </svg>
-                  <p>Drag & drop a file here, or click to browse</p>
-                  <p className="text-xs text-zinc-500 mt-2">Accepted formats: PDF, XLSX, CSV, TXT</p>
-                </>
+        <section>
+          <span className="eyebrow">Section · Indicators</span>
+          <div className="mt-3 flex flex-col md:flex-row gap-4">
+            {/* File Upload */}
+            <div className="flex-1 card-editorial p-6">
+              <h2 className="font-serif text-xl text-ink-50 mb-4 leading-none"
+                  style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
+                Upload file
+              </h2>
+              <label
+                htmlFor="fileUpload"
+                className={`block cursor-pointer border border-dashed p-8 text-center transition-colors ${
+                  dragActive
+                    ? 'border-signal-amber bg-signal-amber/8 text-signal-amber'
+                    : 'border-ink-700 text-ink-400 hover:border-signal-amber hover:text-signal-amber'
+                }`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                {file ? (
+                  <div>
+                    <svg className="mx-auto h-7 w-7 text-signal-amber mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.25}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    <p className="text-ink-100 font-mono text-sm break-all">{file.name}</p>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="mx-auto h-8 w-8 text-ink-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.25}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                    <p className="text-sm">Drag &amp; drop a file, or click to browse</p>
+                    <p className="font-mono text-micro tracking-eyebrow text-ink-600 mt-2">PDF · XLSX · CSV · TXT</p>
+                  </>
+                )}
+                <input id="fileUpload" type="file" className="hidden" accept=".pdf,.xlsx,.csv,.txt" onChange={onFileChange} ref={fileInputRef} aria-label="Upload IOC file" />
+              </label>
+              <label htmlFor="pdf-password" className="sr-only">PDF password</label>
+              <input
+                id="pdf-password"
+                type="password"
+                placeholder="PDF password (only if file is encrypted)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="off"
+                className="mt-4 field-boxed text-sm"
+              />
+              {file && (
+                <button
+                  type="button"
+                  onClick={() => setFile(null)}
+                  className="mt-3 text-xs font-mono uppercase tracking-eyebrow text-signal-rust hover:text-signal-amber transition-colors"
+                >
+                  Remove file
+                </button>
               )}
-              <input id="fileUpload" type="file" className="hidden" accept=".pdf,.xlsx,.csv,.txt" onChange={onFileChange} ref={fileInputRef} aria-label="Upload IOC file" />
-            </label>
-            <label htmlFor="pdf-password" className="sr-only">PDF password</label>
-            <input
-              id="pdf-password"
-              type="password"
-              placeholder="PDF password (only if file is encrypted)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="off"
-              className="mt-4 p-2 border rounded-md w-full bg-zinc-800 text-zinc-100 border-zinc-700 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            {file && (
-              <button
-                type="button"
-                onClick={() => setFile(null)}
-                className="mt-3 text-sm text-red-400 hover:underline"
-              >
-                Remove file
-              </button>
-            )}
-          </div>
+            </div>
 
-          {/* Text Paste */}
-          <div className="flex-1 bg-zinc-900 shadow-lg rounded-lg p-6 border border-zinc-700 flex flex-col">
-            <h2 className="text-xl font-semibold mb-4 text-zinc-100">Paste Text</h2>
-            <textarea
-              rows={10}
-              placeholder="Paste IOCs here - one per line or comma-separated.&#10;&#10;Examples:&#10;192.168.1.100&#10;malware.evil-domain.com&#10;e99a18c428cb38d5f260853678922e03&#10;hxxps://phishing[.]site/login"
-              className="flex-grow p-3 border rounded-md resize-none focus:ring-2 focus:ring-indigo-500 bg-zinc-800 text-zinc-100 border-zinc-700 placeholder-zinc-500 focus:outline-none transition-colors"
-              value={text}
-              onChange={onTextChange}
-              aria-label="Paste IOC text"
-            />
-            {text && (
-              <button
-                type="button"
-                onClick={() => setText('')}
-                className="mt-3 self-end text-sm text-red-400 hover:underline"
-              >
-                Clear text
-              </button>
-            )}
+            {/* Text Paste */}
+            <div className="flex-1 card-editorial p-6 flex flex-col">
+              <h2 className="font-serif text-xl text-ink-50 mb-4 leading-none"
+                  style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
+                Paste indicators
+              </h2>
+              <textarea
+                rows={10}
+                placeholder="One per line or comma-separated.&#10;&#10;192.168.1.100&#10;malware.evil-domain.com&#10;e99a18c428cb38d5f260853678922e03&#10;hxxps://phishing[.]site/login"
+                className="flex-grow field-boxed font-mono text-sm resize-none"
+                value={text}
+                onChange={onTextChange}
+                aria-label="Paste IOC text"
+              />
+              {text && (
+                <button
+                  type="button"
+                  onClick={() => setText('')}
+                  className="mt-3 self-end text-xs font-mono uppercase tracking-eyebrow text-signal-rust hover:text-signal-amber transition-colors"
+                >
+                  Clear text
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        </section>
 
         {/* Submit Button */}
-        <div className="text-center mt-6">
+        <div className="flex justify-center pt-2">
           <button
             type="submit"
             disabled={loading || (!allClients && selectedClients.length === 0)}
-            className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 disabled:opacity-50 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950 inline-flex items-center gap-2"
+            className="btn-amber px-10 py-3.5"
           >
             {loading && (
-              <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             )}
-            {loading ? 'Processing...' : 'Submit'}
+            {loading ? 'Searching across SIEMs' : 'Begin Hunt'}
+            {!loading && (
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.75 6.75L19.25 12l-5.5 5.25M19 12H4.75" />
+              </svg>
+            )}
           </button>
         </div>
       </form>

@@ -4,6 +4,7 @@ import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import ReconSection from '../components/ReconSection';
 import FieldMappingsTab from '../components/FieldMappingsTab';
+import LogSourceMappingsSection from '../components/LogSourceMappingsSection';
 import SecurityTab from '../components/SecurityTab';
 import AuditLogsTab from '../components/AuditLogsTab';
 import Footer from '../components/Footer';
@@ -30,7 +31,8 @@ const SIEM_CONFIGS = {
     label: 'LogRhythm',
     fields: [
       { name: 'apiHost', label: 'API Host URL', type: 'text', required: true, placeholder: 'https://lr-api.yourcompany.com:8501' },
-      { name: 'apiKey', label: 'API Key (Bearer Token)', type: 'password', required: true, placeholder: 'Paste your LogRhythm Bearer token here' }
+      { name: 'apiKey', label: 'API Key (Bearer Token)', type: 'password', required: true, placeholder: 'Paste your LogRhythm Bearer token here' },
+      { name: 'verifySSL', label: 'Verify SSL Certificate', type: 'checkbox', required: false, defaultValue: false }
     ]
   },
   splunk: {
@@ -571,52 +573,68 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="flex-1 max-w-7xl mx-auto p-6 w-full">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div className="flex items-center gap-4">
-            <LeopardLogoCompact size={44} showText={false} />
-            <div>
-              <h1 className="text-2xl font-bold text-zinc-100">Admin Panel</h1>
-              <p className="text-zinc-400 text-sm">The Leopard - Configuration</p>
-            </div>
+    <div className="flex flex-col min-h-screen bg-ink-950 text-ink-50 grain">
+      {/* Editorial header band */}
+      <header className="border-b border-hairline-strong vignette-deep">
+        <div className="max-w-7xl mx-auto px-6 pt-8 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
+          <div>
+            <span className="eyebrow-amber">The Leopard · Admin</span>
+            <h1 className="mt-2 font-serif italic text-5xl leading-none tracking-tight wordmark-gradient"
+                style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
+              Console
+            </h1>
+            <p className="mt-2 font-mono text-micro text-ink-500 tracking-wider-2">
+              CONFIGURATION · CLIENTS · MAPPINGS
+            </p>
           </div>
-          <nav className="flex gap-3 flex-wrap" aria-label="Admin actions">
-            <button onClick={() => navigate('/setup')} className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-zinc-950">
-              Setup Wizard
+          <nav className="flex items-center gap-2 flex-wrap" aria-label="Admin actions">
+            <button onClick={() => navigate('/setup')} className="btn-ghost py-2">
+              Setup
             </button>
-            <button onClick={() => navigate('/')} className="px-4 py-2 bg-zinc-700 text-white rounded-md hover:bg-zinc-600 transition focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-zinc-950">
+            <button onClick={() => navigate('/')} className="btn-ghost py-2">
               Home
             </button>
-            <button onClick={() => { logout(); navigate('/login'); }} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-zinc-950">
-              Logout
+            <button onClick={() => { logout(); navigate('/login'); }}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-transparent text-signal-rust font-medium tracking-wider-2 uppercase text-sm border border-signal-rust/40 hover:bg-signal-rust/10 hover:border-signal-rust transition-colors focus:outline-none focus:ring-1 focus:ring-signal-rust">
+              Sign Out
             </button>
           </nav>
         </div>
+      </header>
 
-        {/* Tab Navigation */}
-        <div className="flex overflow-x-auto border-b border-zinc-800 mb-6 -mx-1" role="tablist" aria-label="Admin panel sections">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`panel-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-5 py-3 font-medium transition-colors -mb-px whitespace-nowrap mx-1 rounded-t-md ${
-                activeTab === tab.id
-                  ? 'text-indigo-300 border-b-2 border-indigo-400 bg-zinc-900/50'
-                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      <div className="flex-1 max-w-7xl mx-auto p-6 w-full">
+
+        {/* Tab Navigation — editorial small-caps strip */}
+        <div className="border-b border-hairline-strong mb-8">
+          <div className="flex items-end gap-1 overflow-x-auto -mb-px" role="tablist" aria-label="Admin panel sections">
+            {TABS.map((tab, idx) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`panel-${tab.id}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`group relative px-4 py-3 transition-colors whitespace-nowrap font-mono uppercase text-xs tracking-eyebrow border-b-2 ${
+                    isActive
+                      ? 'text-signal-amber border-signal-amber'
+                      : 'text-ink-500 border-transparent hover:text-ink-200 hover:border-ink-700'
+                  }`}
+                >
+                  <span className="opacity-60 mr-2 font-serif italic normal-case tracking-normal text-sm"
+                        style={{ fontVariationSettings: '"opsz" 60' }}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Tab Content */}
-        <div className="bg-zinc-900 rounded-lg border border-zinc-700 p-6" role="tabpanel" id={`panel-${activeTab}`}>
+        <div className="card-editorial p-8 animate-fade-up" role="tabpanel" id={`panel-${activeTab}`}>
           {/* SIEM Clients Tab */}
           {activeTab === 'siem' && (
             <div>
@@ -835,6 +853,7 @@ export default function AdminPage() {
             <div>
               <h2 className="text-xl font-semibold mb-4">Field Mappings</h2>
               <FieldMappingsTab token={token} API_URL={API_URL} apiKeys={apiKeys} SIEM_CONFIGS={SIEM_CONFIGS} />
+              <LogSourceMappingsSection token={token} API_URL={API_URL} apiKeys={apiKeys} />
             </div>
           )}
 

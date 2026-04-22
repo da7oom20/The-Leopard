@@ -7,90 +7,89 @@ import React, { useState, useEffect } from 'react';
 const ERROR_STYLES = {
   connection: {
     icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728m12.728 0L5.636 18.364" />
+      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728m12.728 0L5.636 18.364" />
       </svg>
     ),
-    title: 'Connection Error',
-    borderColor: 'border-red-700',
-    bgColor: 'bg-red-900/40',
-    textColor: 'text-red-200',
-    iconColor: 'text-red-400',
+    title: 'Connection',
+    borderColor: 'border-signal-rust/50',
+    bgColor: 'bg-signal-rust/10',
+    textColor: 'text-ink-100',
+    iconColor: 'text-signal-rust',
   },
   auth: {
     icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
       </svg>
     ),
-    title: 'Authentication Error',
-    borderColor: 'border-amber-700',
-    bgColor: 'bg-amber-900/40',
-    textColor: 'text-amber-200',
-    iconColor: 'text-amber-400',
+    title: 'Authentication',
+    borderColor: 'border-signal-amber/50',
+    bgColor: 'bg-signal-amber/10',
+    textColor: 'text-ink-100',
+    iconColor: 'text-signal-amber',
   },
   timeout: {
     icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
     title: 'Timeout',
-    borderColor: 'border-yellow-700',
-    bgColor: 'bg-yellow-900/40',
-    textColor: 'text-yellow-200',
-    iconColor: 'text-yellow-400',
+    borderColor: 'border-signal-amber-soft/50',
+    bgColor: 'bg-signal-amber-soft/10',
+    textColor: 'text-ink-100',
+    iconColor: 'text-signal-amber-soft',
   },
   validation: {
     icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
       </svg>
     ),
-    title: 'Validation Error',
-    borderColor: 'border-orange-700',
-    bgColor: 'bg-orange-900/40',
-    textColor: 'text-orange-200',
-    iconColor: 'text-orange-400',
+    title: 'Validation',
+    borderColor: 'border-signal-amber/40',
+    bgColor: 'bg-signal-amber/8',
+    textColor: 'text-ink-100',
+    iconColor: 'text-signal-amber',
   },
   notfound: {
     icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
     ),
     title: 'Not Found',
-    borderColor: 'border-zinc-600',
-    bgColor: 'bg-zinc-800/80',
-    textColor: 'text-zinc-300',
-    iconColor: 'text-zinc-400',
+    borderColor: 'border-ink-700',
+    bgColor: 'bg-ink-900',
+    textColor: 'text-ink-200',
+    iconColor: 'text-ink-400',
   },
   server: {
     icon: (
-      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
       </svg>
     ),
-    title: 'Server Error',
-    borderColor: 'border-red-800',
-    bgColor: 'bg-red-950/60',
-    textColor: 'text-red-200',
-    iconColor: 'text-red-500',
+    title: 'Server',
+    borderColor: 'border-signal-rust/60',
+    bgColor: 'bg-signal-rust/12',
+    textColor: 'text-ink-100',
+    iconColor: 'text-signal-rust',
   },
 };
 
-// Default style for unknown categories
 const DEFAULT_STYLE = {
   icon: (
-    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
   title: 'Error',
-  borderColor: 'border-red-700',
-  bgColor: 'bg-red-900/40',
-  textColor: 'text-red-200',
-  iconColor: 'text-red-400',
+  borderColor: 'border-signal-rust/50',
+  bgColor: 'bg-signal-rust/10',
+  textColor: 'text-ink-100',
+  iconColor: 'text-signal-rust',
 };
 
 /**
@@ -140,47 +139,47 @@ export default function ErrorAlert({
 
   return (
     <div
-      className={`${style.bgColor} ${style.borderColor} border rounded-lg p-4 ${className}`}
+      className={`${style.bgColor} ${style.borderColor} border-l-2 border-y border-r border-y-hairline border-r-hairline px-4 py-3 ${className}`}
       role="alert"
       aria-live="assertive"
     >
       <div className="flex items-start gap-3">
-        {/* Icon */}
         <span className={style.iconColor}>{style.icon}</span>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Error message */}
-          <p className={`font-medium ${style.textColor}`}>{error}</p>
+          <div className="flex items-baseline gap-2">
+            <span className={`font-mono uppercase text-micro tracking-eyebrow ${style.iconColor}`}>
+              {style.title}
+            </span>
+            <span className="font-mono uppercase text-micro tracking-eyebrow text-ink-500">·</span>
+            <p className={`text-sm ${style.textColor}`}>{error}</p>
+          </div>
 
-          {/* Suggestion */}
           {suggestion && (
-            <p className="mt-1.5 text-sm text-zinc-400 flex items-start gap-1.5">
-              <span className="text-zinc-500 font-medium flex-shrink-0">Tip:</span>
+            <p className="mt-1.5 text-sm text-ink-400 pl-0 flex items-start gap-2">
+              <span className="font-mono uppercase text-micro tracking-eyebrow text-ink-500 mt-0.5 flex-shrink-0">Note</span>
               <span>{suggestion}</span>
             </p>
           )}
 
-          {/* Retry button */}
           {onRetry && (
             <button
               onClick={onRetry}
-              className="mt-2 px-3 py-1 text-sm rounded-md bg-zinc-700 text-zinc-200 hover:bg-zinc-600 transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 text-xs font-mono uppercase tracking-eyebrow text-ink-200 border border-ink-700 hover:border-signal-amber hover:text-signal-amber transition-colors focus:outline-none focus:ring-1 focus:ring-signal-amber"
             >
               Retry
             </button>
           )}
         </div>
 
-        {/* Dismiss button */}
         {onDismiss && (
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 text-zinc-500 hover:text-zinc-300 transition p-0.5 rounded hover:bg-zinc-700/50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-shrink-0 text-ink-500 hover:text-ink-200 transition p-0.5 focus:outline-none focus:ring-1 focus:ring-signal-amber"
             aria-label="Dismiss error"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         )}

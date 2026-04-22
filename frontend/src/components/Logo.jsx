@@ -1,43 +1,59 @@
 import React from 'react';
 
-// The Leopard - Using canvas.png as-is
+/**
+ * The Leopard — wordmark and marks.
+ *
+ * The visual signature is the serif wordmark itself: italic Fraunces "Leopard"
+ * with a hairline rule beneath. The .png mark is kept available for surfaces
+ * that need a literal logo (login hero, favicon-adjacent contexts).
+ */
 
-export const LeopardLogo = ({ size = 48, className = '' }) => (
+export const LeopardMark = ({ size = 48, className = '' }) => (
   <img
     src="/leopard.png"
     alt="The Leopard"
     width={size}
     height={size}
     className={className}
-    style={{ objectFit: 'contain' }}
+    style={{ objectFit: 'contain', filter: 'grayscale(0.15) contrast(1.05)' }}
   />
 );
 
-// Compact version for headers
+// Backwards-compatible aliases — all surfaces import from these names.
+export const LeopardLogo = LeopardMark;
+export const LeopardLogoSilhouette = LeopardMark;
+
+/**
+ * Editorial wordmark — the canonical brand expression.
+ * Use as the primary "logo" on headers and login.
+ */
 export const LeopardLogoCompact = ({ size = 36, showText = true, className = '' }) => (
   <div className={`flex items-center gap-3 ${className}`}>
-    <LeopardLogo size={size} />
+    <LeopardMark size={size} />
     {showText && (
-      <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-        The Leopard
+      <span className="flex flex-col leading-none">
+        <span className="font-serif italic text-2xl tracking-tight wordmark-gradient" style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
+          Leopard
+        </span>
+        <span className="eyebrow mt-1.5">Field Manual · v5</span>
       </span>
     )}
   </div>
 );
 
-// Full logo with tagline
+/**
+ * Wordmark with tagline — used in larger hero contexts.
+ */
 export const LeopardLogoWithText = ({ size = 48, className = '' }) => (
-  <div className={`flex items-center gap-3 ${className}`}>
-    <LeopardLogo size={size} />
-    <div className="flex flex-col">
-      <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+  <div className={`flex items-center gap-4 ${className}`}>
+    <LeopardMark size={size} />
+    <div className="flex flex-col leading-none">
+      <span className="font-serif italic text-3xl tracking-tight wordmark-gradient" style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
         The Leopard
       </span>
-      <span className="text-xs text-zinc-500 -mt-1">Threat Hunter</span>
+      <span className="eyebrow mt-2">Threat Intelligence · Field Manual</span>
     </div>
   </div>
 );
 
-export const LeopardLogoSilhouette = LeopardLogo;
-
-export default LeopardLogo;
+export default LeopardMark;
