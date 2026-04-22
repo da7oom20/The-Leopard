@@ -19,9 +19,9 @@ When the host can't see Docker Hub directly but can reach a corporate
 HTTP proxy, run:
 
 ```bash
-make install-proxy PROXY=http://10.5.13.13:8080
+make install-proxy PROXY=http://proxy.example.com:8080
 # optionally:
-make install-proxy PROXY=http://10.5.13.13:8080 NO_PROXY=10.0.0.0/8,.corp.local
+make install-proxy PROXY=http://proxy.example.com:8080 NO_PROXY=10.0.0.0/8,.corp.local
 ```
 
 The installer (`scripts/install.sh --proxy`) guarantees the proxy

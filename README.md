@@ -96,9 +96,9 @@ Equivalent to `scripts/install.sh --direct`, which wraps `docker compose up -d -
 The host can only reach the internet via a corporate HTTP proxy.
 
 ```bash
-make install-proxy PROXY=http://10.5.13.13:8080
+make install-proxy PROXY=http://proxy.example.com:8080
 # with extra bypass list if needed:
-make install-proxy PROXY=http://10.5.13.13:8080 NO_PROXY=10.0.0.0/8,.corp.local
+make install-proxy PROXY=http://proxy.example.com:8080 NO_PROXY=10.0.0.0/8,.corp.local
 ```
 
 The proxy is used **only** during install — for image pulls and build-time package installs. After the stack is up, the proxy is actively torn out of three independent places so it cannot intercept SIEM requests or container healthchecks at runtime:

@@ -2,7 +2,7 @@
 
 Notes on changes made to get `docker compose up -d` working on a host
 whose only outbound path is an unauthenticated HTTP proxy
-(example: `http://10.5.13.13:8080`).
+(example: `http://proxy.example.com:8080`).
 
 The stack was verified healthy after the changes below:
 
@@ -20,8 +20,8 @@ Create `/etc/systemd/system/docker.service.d/http-proxy.conf`:
 
 ```ini
 [Service]
-Environment="HTTP_PROXY=http://10.5.13.13:8080/"
-Environment="HTTPS_PROXY=http://10.5.13.13:8080/"
+Environment="HTTP_PROXY=http://proxy.example.com:8080/"
+Environment="HTTPS_PROXY=http://proxy.example.com:8080/"
 Environment="NO_PROXY=localhost,127.0.0.1"
 ```
 
@@ -43,8 +43,8 @@ Create or update `~/.docker/config.json`:
 {
   "proxies": {
     "default": {
-      "httpProxy":  "http://10.5.13.13:8080",
-      "httpsProxy": "http://10.5.13.13:8080",
+      "httpProxy":  "http://proxy.example.com:8080",
+      "httpsProxy": "http://proxy.example.com:8080",
       "noProxy":    "localhost,127.0.0.1"
     }
   }
@@ -129,7 +129,7 @@ Running `wget` inside the container made the problem obvious:
 
 ```
 $ docker exec ioc-frontend-v5 wget -S -O- http://127.0.0.1:3080/health
-Connecting to 10.5.13.13:8080 (10.5.13.13:8080)
+Connecting to proxy.example.com:8080 (proxy.example.com:8080)
   HTTP/1.1 503 Service Unavailable
 ```
 
@@ -146,7 +146,7 @@ Two things combine:
 - The frontend image is Alpine-based. Its `wget` is the busybox
   applet, which **does not honor `NO_PROXY`** and only reads
   `http_proxy` (lowercase). So the healthcheck to `127.0.0.1:3080`
-  was being proxied through `10.5.13.13:8080`, which returned 503.
+  was being proxied through `proxy.example.com:8080`, which returned 503.
 
 The `backend-v5` service in compose already cleared `HTTP_PROXY` and
 `HTTPS_PROXY`, but only the uppercase variants, and the frontend
@@ -200,7 +200,7 @@ Added the lowercase counterparts to `backend-v5` for the same reason:
 > (external SaaS SIEM, etc.), don't clear the backend's proxy vars —
 > instead add the SIEM host to `NO_PROXY`/`no_proxy` exclusions only
 > for hosts you want to reach directly, and leave the proxy pointed
-> at `10.5.13.13:8080` for the rest.
+> at `proxy.example.com:8080` for the rest.
 
 ## 4. Verifying
 

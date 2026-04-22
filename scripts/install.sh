@@ -5,7 +5,7 @@
 #   --direct              Host has direct internet access to Docker Hub / npm /
 #                         Debian / Alpine repos. Default.
 #   --proxy URL           Host only has internet via an HTTP proxy (e.g.
-#                         http://10.5.13.13:8080). The proxy is used ONLY
+#                         http://proxy.example.com:8080). The proxy is used ONLY
 #                         during install (image pulls + RUN-step package
 #                         installs). It is explicitly torn down before the
 #                         stack is brought up so runtime containers never
@@ -31,7 +31,7 @@ Usage: scripts/install.sh [--direct | --proxy URL] [options]
 
 Modes (pick one):
   --direct              Install with direct internet access (default).
-  --proxy URL           Install through an HTTP proxy (e.g. http://10.5.13.13:8080).
+  --proxy URL           Install through an HTTP proxy (e.g. http://proxy.example.com:8080).
                         Proxy is applied only to image pulls and build RUN steps.
                         Container runtime will NOT use the proxy.
 
@@ -45,7 +45,7 @@ Options:
 
 Examples:
   scripts/install.sh                                      # direct
-  scripts/install.sh --proxy http://10.5.13.13:8080       # via proxy, install-time only
+  scripts/install.sh --proxy http://proxy.example.com:8080       # via proxy, install-time only
   scripts/install.sh --proxy http://proxy.corp:3128 \
                      --no-proxy 10.0.0.0/8,.corp.local    # with extra bypass list
 EOF
@@ -70,7 +70,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$MODE" = "proxy" ] && [ -z "$PROXY_URL" ]; then
-  die "--proxy requires a URL (e.g. --proxy http://10.5.13.13:8080)"
+  die "--proxy requires a URL (e.g. --proxy http://proxy.example.com:8080)"
 fi
 if [ "$MODE" = "proxy" ] && ! [[ "$PROXY_URL" =~ ^https?:// ]]; then
   die "Proxy URL must start with http:// or https:// — got '$PROXY_URL'"

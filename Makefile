@@ -38,10 +38,10 @@ help: ## List available targets
 install: ## Install with direct internet access (build + start)
 	bash scripts/install.sh --direct
 
-install-proxy: ## Install via HTTP proxy (install-time only). Usage: make install-proxy PROXY=http://10.5.13.13:8080 [NO_PROXY=...]
+install-proxy: ## Install via HTTP proxy (install-time only). Usage: make install-proxy PROXY=http://proxy.example.com:8080 [NO_PROXY=...]
 	@if [ -z "$(PROXY)" ]; then \
 	  echo "Usage: make install-proxy PROXY=http://host:port [NO_PROXY=extra,hosts]"; \
-	  echo "Example: make install-proxy PROXY=http://10.5.13.13:8080"; \
+	  echo "Example: make install-proxy PROXY=http://proxy.example.com:8080"; \
 	  exit 1; \
 	fi
 	bash scripts/install.sh --proxy "$(PROXY)" $(if $(NO_PROXY),--no-proxy "$(NO_PROXY)",)
