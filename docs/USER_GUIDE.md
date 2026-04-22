@@ -584,12 +584,12 @@ bash tests/run-security-tests.sh
 ## Getting Help
 
 - **GitHub Issues**: Report bugs and request features
-- **Documentation**: See CLAUDE.md for developer details
+- **Documentation**: See `docs/TROUBLESHOOTING.md`, `docs/OFFLINE_INSTALL.md`, and `docs/PROXY_SETUP.md`
 - **Logs**: Always check Docker logs first when troubleshooting
 
 ---
 
-**The Leopard** - Community Edition v5.6
+**The Leopard** - Community Edition v5.7
 
 Developed by Abdulrahman Almahameed
 

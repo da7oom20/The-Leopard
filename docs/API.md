@@ -1,4 +1,4 @@
-# The Leopard - API Reference v5.6
+# The Leopard - API Reference v5.7
 
 Base URL: `https://<host>:3000/api`
 
