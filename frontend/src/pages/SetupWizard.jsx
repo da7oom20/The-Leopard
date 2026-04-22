@@ -22,113 +22,20 @@ export default function SetupWizard() {
   const [modeSelection, setModeSelection] = useState('standalone');
   const [showRerunConfirm, setShowRerunConfirm] = useState(false);
   const [dbStatus, setDbStatus] = useState({ testing: false, success: null, message: '' });
-  const [siemForm, setSiemForm] = useState({ client: '', siemType: '', apiHost: '', apiKey: '', verifySSL: false });
+  const [siemForm, setSiemFormRaw] = useState({ client: '', siemType: '', apiHost: '', apiKey: '', verifySSL: false });
   const [siemStatus, setSiemStatus] = useState({ testing: false, success: null, message: '' });
+  // Separate flag: did the SIEM actually land in the DB (POST /setup/add-siem success)?
+  // testSiem() alone does NOT persist — it just hits the adapter with a throwaway client='setup-test'.
+  const [siemSaved, setSiemSaved] = useState(false);
+  // Editing the form invalidates any prior save, since add-siem uses the current form values.
+  const setSiemForm = (next) => {
+    setSiemFormRaw(next);
+    setSiemSaved(false);
+  };
   const [adminForm, setAdminForm] = useState({ username: '', password: '', confirmPassword: '' });
   const [adminStatus, setAdminStatus] = useState({ creating: false, success: null, message: '' });
   const [completing, setCompleting] = useState(false);
   const [requireSearchAuth, setRequireSearchAuth] = useState(true);
-
-  // Log Sources step
-  const IOC_TYPES = ['IP', 'Hash', 'Domain', 'URL', 'Email', 'FileName'];
-  const [logSourceState, setLogSourceState] = useState({
-    loading: false,
-    error: '',
-    sources: [],          // raw sources from SIEM
-    siemTypeFetched: ''
-  });
-  // mappings: { IP: Set<sourceKey>, ... }
-  const [lsSelections, setLsSelections] = useState(() =>
-    Object.fromEntries(IOC_TYPES.map(t => [t, new Set()]))
-  );
-  const [lsFilters, setLsFilters] = useState(() =>
-    Object.fromEntries(IOC_TYPES.map(t => [t, '']))
-  );
-  const [lsSaveStatus, setLsSaveStatus] = useState({ saving: false, success: null, message: '' });
-  const [lsSkipConfirm, setLsSkipConfirm] = useState(false);
-
-  const sourceLabel = (siemType) => {
-    switch ((siemType || '').toLowerCase()) {
-      case 'splunk': return 'Indexes';
-      case 'logrhythm': return 'Log Source Lists';
-      case 'elastic': return 'Indexes';
-      case 'wazuh': return 'Agents';
-      case 'qradar': return 'Log Sources';
-      case 'manageengine': return 'Log Sources';
-      default: return 'Log Sources';
-    }
-  };
-
-  const sourceKey = (s) => String(s.id ?? s.listId ?? s.name ?? s.guid ?? '');
-
-  const loadLogSources = async () => {
-    if (!siemForm.client) {
-      setLogSourceState({ loading: false, error: 'Save the SIEM in the previous step first.', sources: [], siemTypeFetched: '' });
-      return;
-    }
-    setLogSourceState(prev => ({ ...prev, loading: true, error: '' }));
-    try {
-      const res = await fetch(`${API_URL}/setup/list-log-sources`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client: siemForm.client })
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setLogSourceState({ loading: false, error: data.error || 'Failed to load log sources', sources: [], siemTypeFetched: '' });
-        return;
-      }
-      setLogSourceState({ loading: false, error: '', sources: data.sources || [], siemTypeFetched: data.siemType || siemForm.siemType });
-    } catch (err) {
-      setLogSourceState({ loading: false, error: 'Network error fetching log sources', sources: [], siemTypeFetched: '' });
-    }
-  };
-
-  const toggleLsSelection = (iocType, key) => {
-    setLsSelections(prev => {
-      const next = { ...prev };
-      const set = new Set(next[iocType]);
-      if (set.has(key)) set.delete(key); else set.add(key);
-      next[iocType] = set;
-      return next;
-    });
-  };
-
-  const saveLogSources = async (skipAll = false) => {
-    setLsSaveStatus({ saving: true, success: null, message: skipAll ? 'Saving empty mapping...' : 'Saving mappings...' });
-    const payload = { client: siemForm.client, mappings: {} };
-    if (!skipAll) {
-      for (const iocType of IOC_TYPES) {
-        const selected = Array.from(lsSelections[iocType] || []);
-        const items = selected
-          .map(key => logSourceState.sources.find(s => sourceKey(s) === key))
-          .filter(Boolean)
-          .map(s => ({
-            listId: s.listId ?? s.id ?? null,
-            name: s.name ?? null,
-            guid: s.guid ?? null,
-            listType: s.listType ?? null
-          }));
-        if (items.length > 0) payload.mappings[iocType] = items;
-      }
-    }
-    try {
-      const res = await fetch(`${API_URL}/setup/save-log-source-mappings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (data.success) {
-        setLsSaveStatus({ saving: false, success: true, message: skipAll ? 'Skipped — searches will scan all sources.' : `Saved ${data.written} mapping(s).` });
-        nextStep();
-      } else {
-        setLsSaveStatus({ saving: false, success: false, message: data.error || 'Failed to save log source mappings' });
-      }
-    } catch (err) {
-      setLsSaveStatus({ saving: false, success: false, message: 'Network error saving mappings' });
-    }
-  };
 
   const testDatabase = async () => {
     setDbStatus({ testing: true, success: null, message: 'Testing database connection...' });
@@ -178,13 +85,37 @@ export default function SetupWizard() {
       const data = await res.json();
       if (data.success) {
         setSiemStatus({ testing: false, success: true, message: 'SIEM connection saved!' });
+        setSiemSaved(true);
         updateSetup({ siemConfigured: true });
+        return true;
       } else {
         setSiemStatus({ testing: false, success: false, message: data.error || 'Failed to save SIEM' });
+        return false;
       }
     } catch (err) {
       setSiemStatus({ testing: false, success: false, message: 'Failed to save SIEM configuration' });
+      return false;
     }
+  };
+
+  // Continue button on the SIEM Setup step.
+  //   - empty form           -> advance (user is deferring SIEM setup)
+  //   - unsaved but valid    -> auto-save first, only advance if save succeeds
+  //   - already saved        -> advance
+  // Log-source mapping is not handled in the wizard anymore; the operator
+  // configures it post-setup from Admin -> Field Mappings (a reminder shows
+  // on the Complete step).
+  const continueFromSiem = async () => {
+    const hasData = siemForm.client && siemForm.siemType && siemForm.apiHost;
+    if (!hasData) {
+      nextStep();
+      return;
+    }
+    if (!siemSaved) {
+      const ok = await saveSiem();
+      if (!ok) return; // stay on this step and show the error
+    }
+    nextStep();
   };
 
   const createAdmin = async () => {
@@ -219,28 +150,41 @@ export default function SetupWizard() {
     }
   };
 
+  const [completeError, setCompleteError] = useState('');
   const handleComplete = async () => {
     if (completing) return;
     setCompleting(true);
+    setCompleteError('');
     try {
-      // Save the search auth setting during setup completion
-      await fetch(`${API_URL}/setup/complete`, {
+      // Save the search auth setting AND flip the setup-complete flag.
+      // The server enforces that an admin user must already exist, so the
+      // Admin User step must have been completed before this call can win.
+      const res = await fetch(`${API_URL}/setup/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requireSearchAuth })
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCompleteError(data.error || 'Failed to finalize setup. Please try again.');
+        return;
+      }
       await completeSetup();
       navigate('/login');
+    } catch (err) {
+      setCompleteError('Network error finalizing setup. Check backend connectivity and retry.');
     } finally {
       setCompleting(false);
     }
   };
 
+  // Log Source Mapping intentionally lives outside the wizard now.
+  // It's surfaced as a strongly-recommended post-setup task on the
+  // Complete step, linking to Admin -> Field Mappings -> Log Source Mapping.
   const steps = [
     { id: 'welcome', title: 'Welcome' },
     { id: 'database', title: 'Database' },
     { id: 'siem', title: 'SIEM Setup' },
-    { id: 'logsources', title: 'Log Sources' },
     { id: 'admin', title: 'Admin User' },
     { id: 'complete', title: 'Complete' }
   ];
@@ -627,169 +571,21 @@ export default function SetupWizard() {
                     Back
                   </button>
                   <button
-                    onClick={() => { nextStep(); if (siemStatus.success) loadLogSources(); }}
-                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition"
+                    onClick={continueFromSiem}
+                    disabled={siemStatus.testing}
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
                   >
-                    {siemStatus.success ? 'Continue' : 'Skip for Now'}
+                    {!siemForm.client || !siemForm.siemType || !siemForm.apiHost
+                      ? 'Skip for Now'
+                      : siemSaved ? 'Continue' : 'Save & Continue'}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 3: Log Sources */}
+
+            {/* Step 3: Admin User */}
             {currentStep === 3 && (
-              <div>
-                <h2 className="text-2xl font-bold mb-4">Log Source Mapping</h2>
-                <p className="text-zinc-400 mb-2">
-                  Pick which {sourceLabel(logSourceState.siemTypeFetched || siemForm.siemType).toLowerCase()} the search should target for each IOC type.
-                  This narrows the SIEM query so searches return faster and don't load every source.
-                </p>
-                <p className="text-zinc-500 text-sm mb-6">
-                  You can change these later under <span className="text-zinc-300">Admin → Field Mappings → Log Sources</span>.
-                </p>
-
-                {!siemForm.client && (
-                  <div className="p-4 rounded-lg bg-yellow-900/30 text-yellow-300 border border-yellow-800 mb-4">
-                    No SIEM was saved in the previous step. Go back and save one before mapping log sources, or skip this step.
-                  </div>
-                )}
-
-                {siemForm.client && (
-                  <div className="flex items-center gap-3 mb-4">
-                    <button
-                      onClick={loadLogSources}
-                      disabled={logSourceState.loading}
-                      className="px-4 py-2 bg-zinc-700 text-zinc-100 rounded-lg text-sm hover:bg-zinc-600 transition disabled:opacity-50"
-                    >
-                      {logSourceState.loading ? 'Loading…' : (logSourceState.sources.length > 0 ? 'Reload from SIEM' : 'Load from SIEM')}
-                    </button>
-                    <span className="text-xs text-zinc-500">
-                      {logSourceState.sources.length > 0
-                        ? `${logSourceState.sources.length} ${sourceLabel(logSourceState.siemTypeFetched).toLowerCase()} available`
-                        : 'Click to fetch from the SIEM you just configured.'}
-                    </span>
-                  </div>
-                )}
-
-                {logSourceState.error && (
-                  <div className="p-4 rounded-lg bg-red-900/30 text-red-300 border border-red-800 mb-4" role="alert">
-                    {logSourceState.error}
-                  </div>
-                )}
-
-                {logSourceState.sources.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    {IOC_TYPES.map(iocType => {
-                      const filter = (lsFilters[iocType] || '').toLowerCase();
-                      const filtered = logSourceState.sources.filter(s => {
-                        if (!filter) return true;
-                        return (s.name || '').toLowerCase().includes(filter)
-                          || String(s.id ?? s.listId ?? '').includes(filter);
-                      });
-                      const selected = lsSelections[iocType] || new Set();
-                      return (
-                        <div key={iocType} className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="font-semibold text-zinc-100">{iocType}</h3>
-                            <span className="text-xs text-zinc-500">{selected.size} selected</span>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder={`Filter ${sourceLabel(logSourceState.siemTypeFetched).toLowerCase()}…`}
-                            value={lsFilters[iocType] || ''}
-                            onChange={(e) => setLsFilters(prev => ({ ...prev, [iocType]: e.target.value }))}
-                            className="w-full bg-zinc-900 border border-zinc-700 p-2 rounded text-sm text-zinc-100 placeholder-zinc-500 mb-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                          <div className="max-h-48 overflow-y-auto pr-1 space-y-1">
-                            {filtered.length === 0 && (
-                              <p className="text-xs text-zinc-500 italic px-1">No matches.</p>
-                            )}
-                            {filtered.map(s => {
-                              const key = sourceKey(s);
-                              const isChecked = selected.has(key);
-                              return (
-                                <label key={key} className="flex items-center gap-2 p-1.5 rounded hover:bg-zinc-700/50 cursor-pointer text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => toggleLsSelection(iocType, key)}
-                                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500"
-                                  />
-                                  <span className="text-zinc-200 truncate" title={s.name}>{s.name || `(unnamed) #${s.id ?? s.listId}`}</span>
-                                  {(s.id ?? s.listId) != null && (
-                                    <span className="text-xs text-zinc-500 ml-auto">#{s.id ?? s.listId}</span>
-                                  )}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {lsSaveStatus.message && (
-                  <div className={`p-4 rounded-lg mb-4 ${
-                    lsSaveStatus.success === true ? 'bg-green-900/30 text-green-400 border border-green-800' :
-                    lsSaveStatus.success === false ? 'bg-red-900/30 text-red-400 border border-red-800' :
-                    'bg-yellow-900/30 text-yellow-400 border border-yellow-800'
-                  }`} role={lsSaveStatus.success === false ? 'alert' : 'status'}>
-                    {lsSaveStatus.message}
-                  </div>
-                )}
-
-                {lsSkipConfirm && (
-                  <div className="p-4 rounded-lg bg-amber-900/30 text-amber-200 border border-amber-700 mb-4">
-                    <p className="font-semibold mb-1">⚠ Skip log source selection?</p>
-                    <p className="text-sm mb-3">
-                      Without a mapping, every IOC search will scan <span className="font-semibold">all</span> sources in your SIEM.
-                      {(siemForm.siemType === 'logrhythm' || logSourceState.siemTypeFetched === 'logrhythm') && ' On LogRhythm this can take minutes per query and put noticeable load on the deployment.'}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setLsSkipConfirm(false); saveLogSources(true); }}
-                        disabled={lsSaveStatus.saving}
-                        className="px-4 py-2 bg-amber-600 text-white rounded text-sm hover:bg-amber-700 transition disabled:opacity-50"
-                      >
-                        Yes, skip anyway
-                      </button>
-                      <button
-                        onClick={() => setLsSkipConfirm(false)}
-                        className="px-4 py-2 border border-zinc-600 text-zinc-300 rounded text-sm hover:bg-zinc-800 transition"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between mt-8 pt-6 border-t border-zinc-700">
-                  <button onClick={prevStep} className="px-6 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition">
-                    Back
-                  </button>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setLsSkipConfirm(true)}
-                      disabled={lsSaveStatus.saving}
-                      className="px-6 py-2 border border-amber-700 text-amber-300 rounded-lg font-medium hover:bg-amber-900/30 transition disabled:opacity-50"
-                    >
-                      Skip
-                    </button>
-                    <button
-                      onClick={() => saveLogSources(false)}
-                      disabled={lsSaveStatus.saving || !siemForm.client || logSourceState.sources.length === 0}
-                      className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
-                    >
-                      {lsSaveStatus.saving ? 'Saving…' : 'Save & Continue'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Step 4: Admin User */}
-            {currentStep === 4 && (
               <div>
                 <h2 className="text-2xl font-bold mb-4">Create Admin User</h2>
                 <p className="text-zinc-400 mb-6">
@@ -868,8 +664,8 @@ export default function SetupWizard() {
               </div>
             )}
 
-            {/* Step 5: Complete */}
-            {currentStep === 5 && (
+            {/* Step 4: Complete */}
+            {currentStep === 4 && (
               <div className="text-center">
                 <div className="text-6xl mb-6">🎉</div>
                 <h2 className="text-2xl font-bold mb-4">Setup Complete!</h2>
@@ -906,23 +702,65 @@ export default function SetupWizard() {
                   </div>
                 </div>
 
+                {/* Highly-recommended post-setup task — log source mapping.
+                    Without it, every IOC search scans every source in the
+                    SIEM and will be dramatically slower (minutes per query
+                    on LogRhythm, noticeable load on the SIEM itself). */}
+                <div className="p-6 rounded-lg mb-6 text-left border border-amber-700/60 bg-amber-900/20">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.572L16.5 21.75l-.398-1.178a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.179-.398a2.25 2.25 0 001.423-1.423l.398-1.178.398 1.178a2.25 2.25 0 001.423 1.423l1.179.398-1.179.398a2.25 2.25 0 00-1.423 1.423z" />
+                    </svg>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-200 mb-1">
+                        Highly recommended: configure Log Source Mapping
+                      </h3>
+                      <p className="text-sm text-zinc-300 leading-relaxed">
+                        Pick which log sources, indexes, or agents each IOC type
+                        should be queried against. Without a mapping, every
+                        search scans every source in the SIEM — dramatically
+                        slower on large deployments and noticeable load on
+                        LogRhythm in particular.
+                      </p>
+                      <button
+                        onClick={() => navigate('/admin?tab=mappings#log-source-mapping')}
+                        className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded font-medium text-sm hover:bg-amber-700 transition focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
+                      >
+                        Open Log Source Mapping
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.75 6.75L19.25 12l-5.5 5.25M19 12H4.75" />
+                        </svg>
+                      </button>
+                      <p className="text-xs text-zinc-500 mt-2">
+                        (You'll be prompted to log in first, then dropped straight into Field Mappings → Log Source Mapping.)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="bg-zinc-800/50 p-6 rounded-lg mb-8 text-left">
-                  <h3 className="font-semibold mb-3">Next Steps:</h3>
-                  <ul className="space-y-2 text-zinc-400">
+                  <h3 className="font-semibold mb-3">Other next steps</h3>
+                  <ul className="space-y-2 text-zinc-400 text-sm">
                     <li>• Log in with your admin credentials</li>
                     <li>• Add more SIEM connections if needed</li>
                     <li>• Configure Threat Intelligence sources</li>
                     <li>• Use Field Discovery to discover SIEM fields</li>
-                    <li>• Start searching for IOCs!</li>
+                    <li>• Start searching for IOCs</li>
                   </ul>
                 </div>
 
+                {completeError && (
+                  <div className="mb-4 p-3 border-l-2 border-red-500 bg-red-900/20 border-y border-r border-y-hairline border-r-hairline text-left" role="alert">
+                    <p className="font-mono text-micro uppercase tracking-eyebrow text-red-400">Cannot finalize</p>
+                    <p className="text-sm text-zinc-200 mt-1">{completeError}</p>
+                  </div>
+                )}
                 <button
                   onClick={handleComplete}
                   disabled={completing}
                   className="px-8 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition disabled:opacity-50"
                 >
-                  {completing ? 'Completing...' : 'Go to Login'}
+                  {completing ? 'Completing...' : 'Finish Setup & Go to Login'}
                 </button>
               </div>
             )}

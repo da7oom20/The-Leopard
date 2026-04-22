@@ -186,7 +186,7 @@ export default function LogSourceMappingsSection({ token, API_URL, apiKeys }) {
   const selectedCount = activeSet.size;
 
   return (
-    <div className="mt-10 pt-8 border-t border-zinc-800">
+    <div id="log-source-mapping" className="mt-10 pt-8 border-t border-zinc-800 scroll-mt-24">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-zinc-100">Log Source Mapping</h3>

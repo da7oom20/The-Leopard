@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import AuthContext from '../context/AuthContext';
 import ReconSection from '../components/ReconSection';
@@ -124,9 +124,32 @@ const getApiUrl = () => process.env.REACT_APP_API_URL || '/api';
 export default function AdminPage() {
   const { token, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
   const API_URL = getApiUrl();
 
-  const [activeTab, setActiveTab] = useState('siem');
+  // Deep-linkable tab state. The Setup Wizard's "Open Log Source Mapping"
+  // button navigates to /admin?tab=mappings#log-source-mapping — honor both
+  // the query string (which tab) and the hash (scroll target within the tab).
+  const initialTab = (() => {
+    const params = new URLSearchParams(location.search);
+    const t = params.get('tab');
+    return ['siem', 'ti', 'recon', 'mappings', 'users', 'security', 'audit'].includes(t) ? t : 'siem';
+  })();
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  // When the Field Mappings tab is active and the URL hash points at an
+  // anchor, scroll it into view after the tab panel renders.
+  useEffect(() => {
+    if (activeTab === 'mappings' && location.hash) {
+      // A short timeout lets the tab panel paint before we scroll.
+      const id = location.hash.slice(1);
+      const t = setTimeout(() => {
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  }, [activeTab, location.hash]);
   const [apiKeys, setApiKeys] = useState([]);
   const [form, setForm] = useState({
     client: '', siemType: '', apiHost: '', apiKey: '', username: '', password: '', port: '', verifySSL: true, extraConfig: {}
