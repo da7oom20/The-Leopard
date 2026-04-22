@@ -14,19 +14,33 @@ const { validatePassword } = require('../utils/password');
 const { child } = require('../utils/logger');
 const log = child({ area: 'setup' });
 
+// Explicit "setup is finished" flag. Lives in AppSetting so it survives
+// restarts. Set exactly once by POST /api/setup/complete (the wizard's
+// last step). The runtime check is the flag alone — no lazy inference
+// from row counts, because a fresh install legitimately has admin+SIEM
+// mid-wizard and would otherwise be wrongly treated as complete.
+//
+// For upgrades from v5.6 (which has no flag): operators walk the wizard
+// once, add-siem upserts existing rows, create-admin rejects with a
+// friendly "admin already exists" message, and Complete sets the flag.
+async function isSetupComplete() {
+  const flagRow = await AppSetting.findOne({ where: { key: 'setupComplete' } });
+  return !!flagRow && flagRow.value === 'true';
+}
+
 // Check setup status
 router.get('/status', async (req, res) => {
   try {
-    const userCount = await User.count();
-    const siemCount = await ApiKey.count();
+    const [userCount, siemCount, complete] = await Promise.all([
+      User.count(), ApiKey.count(), isSetupComplete()
+    ]);
 
-    const isComplete = userCount > 0;
     res.json({
-      isComplete,
+      isComplete: complete,
       dbConnected: true,
       siemConfigured: siemCount > 0,
       adminCreated: userCount > 0,
-      ...(isComplete && {
+      ...(complete && {
         warning: 'Setup is already complete. Re-running setup requires admin authentication. Existing configurations will be preserved.',
         userCount,
         siemCount
@@ -50,8 +64,7 @@ router.use((req, res, next) => {
 // Test database connection
 router.post('/test-db', async (req, res) => {
   try {
-    const userCount = await User.count();
-    if (userCount > 0) {
+    if (await isSetupComplete()) {
       const authHeader = req.headers['authorization'];
       const token = authHeader && authHeader.split(' ')[1];
       if (!token) {
@@ -93,34 +106,20 @@ router.post('/test-db', async (req, res) => {
   }
 });
 
-// Add SIEM during setup
+// Add SIEM during setup. The wizard may call this more than once in a
+// single session — operator fat-fingers a host, edits, hits Save & Continue
+// again; or adds one SIEM, goes back, adds another. Upsert by client name
+// so re-saves update the existing row instead of being rejected. Real
+// security is the isSetupComplete() gate: once the wizard's last step
+// flips the setupComplete flag, this endpoint stops accepting writes.
 router.post('/add-siem', async (req, res) => {
   try {
-    const userCount = await User.count();
-    if (userCount > 0) {
-      return res.status(403).json({ error: 'Setup already completed. Use admin panel instead.' });
-    }
-
-    const existingCount = await ApiKey.count();
-    if (existingCount > 0) {
-      const authHeader = req.headers['authorization'];
-      const token = authHeader && authHeader.split(' ')[1];
-      if (!token) {
-        return res.status(403).json({
-          success: false,
-          error: 'Setup already complete. SIEM connections already exist.',
-          suggestion: 'Use the Admin panel to add more SIEMs, or log in as admin to re-run setup.',
-          category: 'auth'
-        });
-      }
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
-        if (decoded.role !== 'admin') {
-          return res.status(403).json({ success: false, error: 'Admin access required to add SIEMs after initial setup.' });
-        }
-      } catch (jwtErr) {
-        return res.status(403).json({ success: false, error: 'Invalid or expired token. Please log in again.' });
-      }
+    if (await isSetupComplete()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Setup already completed. Use the Admin panel to add or edit SIEM connections.',
+        category: 'auth'
+      });
     }
 
     const { client, siemType, apiHost, apiKey, username, password, port, verifySSL, extraConfig } = req.body;
@@ -134,8 +133,7 @@ router.post('/add-siem', async (req, res) => {
       return res.status(400).json({ success: false, error: `Invalid SIEM type. Must be one of: ${validSiemTypes.join(', ')}` });
     }
 
-    await ApiKey.create({
-      client,
+    const fields = {
       siemType,
       apiHost,
       apiKey: apiKey || '',
@@ -145,10 +143,18 @@ router.post('/add-siem', async (req, res) => {
       verifySSL: verifySSL !== false,
       extraConfig: extraConfig || {},
       isActive: true
-    });
+    };
 
-    log.info('SIEM connection saved', { request: req.requestId, client, siemType, apiHost, verifySSL: verifySSL !== false });
-    res.status(201).json({ success: true, message: 'SIEM connection added' });
+    const existing = await ApiKey.findOne({ where: { client } });
+    if (existing) {
+      await existing.update(fields);
+      log.info('SIEM connection updated (setup)', { request: req.requestId, client, siemType, apiHost });
+      return res.json({ success: true, message: 'SIEM connection updated', updated: true });
+    }
+
+    await ApiKey.create({ client, ...fields });
+    log.info('SIEM connection saved (setup)', { request: req.requestId, client, siemType, apiHost, verifySSL: verifySSL !== false });
+    res.status(201).json({ success: true, message: 'SIEM connection added', created: true });
   } catch (err) {
     log.error('add-siem failed', { request: req.requestId, error: err.message });
     res.status(500).json({ success: false, error: 'Failed to add SIEM connection' });
@@ -158,9 +164,17 @@ router.post('/add-siem', async (req, res) => {
 // Create first admin during setup
 router.post('/create-admin', async (req, res) => {
   try {
+    if (await isSetupComplete()) {
+      return res.status(403).json({ error: 'Setup already completed. Use admin panel instead.' });
+    }
+    // Only one admin may be created via the wizard. Additional admins must
+    // be added from the admin panel by an authenticated admin.
     const userCount = await User.count();
     if (userCount > 0) {
-      return res.status(403).json({ error: 'Setup already completed. Use admin panel instead.' });
+      return res.status(403).json({
+        success: false,
+        error: 'An admin user already exists. Continue to the next step, or use the Admin panel to create additional users.'
+      });
     }
 
     const { username, password } = req.body;
@@ -204,8 +218,7 @@ router.post('/create-admin', async (req, res) => {
 // Test SIEM connection during setup
 router.post('/test-siem', async (req, res) => {
   try {
-    const userCount = await User.count();
-    if (userCount > 0) {
+    if (await isSetupComplete()) {
       return res.status(403).json({ success: false, error: 'Setup already completed. Use admin panel instead.' });
     }
 
@@ -255,8 +268,7 @@ router.post('/test-siem', async (req, res) => {
 // Body: { client }
 router.post('/list-log-sources', async (req, res) => {
   try {
-    const userCount = await User.count();
-    if (userCount > 0) {
+    if (await isSetupComplete()) {
       return res.status(403).json({ success: false, error: 'Setup already completed. Use /api/admin/log-sources/:clientId instead.' });
     }
     const { client } = req.body || {};
@@ -290,8 +302,7 @@ router.post('/list-log-sources', async (req, res) => {
 // Body: { client, mappings: { IP: [{listId,name,guid,listType}, ...], Hash: [...], ... } }
 router.post('/save-log-source-mappings', async (req, res) => {
   try {
-    const userCount = await User.count();
-    if (userCount > 0) {
+    if (await isSetupComplete()) {
       return res.status(403).json({ success: false, error: 'Setup already completed. Use /api/admin/log-source-mappings instead.' });
     }
     const { client, mappings } = req.body || {};
@@ -329,12 +340,22 @@ router.post('/save-log-source-mappings', async (req, res) => {
   }
 });
 
-// Mark setup as complete
+// Mark setup as complete. This is the only call that flips the
+// setupComplete flag — intermediate steps (db test, SIEM save, admin
+// create) no longer mark setup done on their own. Requires at least
+// one admin user to exist, otherwise setup is trivially incomplete.
 router.post('/complete', async (req, res) => {
   try {
-    const userCount = await User.count();
-    if (userCount > 0) {
+    if (await isSetupComplete()) {
       return res.status(403).json({ error: 'Setup already completed. Use admin panel instead.' });
+    }
+
+    const userCount = await User.count();
+    if (userCount === 0) {
+      return res.status(400).json({
+        error: 'No admin user has been created yet. Finish the Admin User step first.',
+        category: 'validation'
+      });
     }
 
     const { requireSearchAuth } = req.body || {};
@@ -343,11 +364,18 @@ router.post('/complete', async (req, res) => {
       setRequireSearchAuth(requireSearchAuth);
     }
 
-    log.info('setup marked complete', { request: req.requestId, requireSearchAuth: requireSearchAuth ?? null });
+    await AppSetting.upsert({ key: 'setupComplete', value: 'true' });
+
+    log.info('setup marked complete', {
+      request: req.requestId,
+      requireSearchAuth: requireSearchAuth ?? null,
+      userCount,
+      siemCount: await ApiKey.count()
+    });
     res.json({ success: true });
   } catch (err) {
     log.error('complete failed', { request: req.requestId, error: err.message });
-    res.status(500).json({ error: 'Failed to verify setup status.' });
+    res.status(500).json({ error: 'Failed to mark setup complete.' });
   }
 });
 
