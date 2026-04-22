@@ -1,6 +1,12 @@
 node_modules/
 .env
 
+# Agent / editor state
+.claude/
+
+# Offline-install bundle output
+dist/
+
 # SSL certificates and keys
 *.pem
 *.key
