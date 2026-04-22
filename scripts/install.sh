@@ -147,6 +147,63 @@ if [ -f "$DOCKER_CFG" ] && grep -q '"proxies"' "$DOCKER_CFG" 2>/dev/null; then
   fi
 fi
 
+# ---- .env seed + JWT_SECRET ------------------------------------------------
+# docker-compose.yml requires JWT_SECRET, and compose's variable substitution
+# fails hard if it's absent. Seed .env from .env.example on a fresh clone,
+# then fill in a real JWT_SECRET if the value is blank or a known placeholder.
+# Mirrors scripts/install-from-bundle.sh so both install paths behave the
+# same on first run.
+
+gen_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 48
+  else
+    # POSIX fallback — /dev/urandom rendered as hex via od.
+    od -vN 48 -An -tx1 /dev/urandom | tr -d ' \n'
+  fi
+}
+
+ENV_FILE="$REPO_ROOT/.env"
+ENV_EXAMPLE="$REPO_ROOT/.env.example"
+
+if [ ! -f "$ENV_FILE" ]; then
+  if [ ! -f "$ENV_EXAMPLE" ]; then
+    die ".env.example missing from repo; cannot seed .env"
+  fi
+  log "no .env found; seeding from .env.example"
+  [ "$DRY_RUN" != 1 ] && cp "$ENV_EXAMPLE" "$ENV_FILE"
+else
+  log ".env already present; leaving it alone except for JWT_SECRET seeding"
+fi
+
+if [ "$DRY_RUN" != 1 ]; then
+  current_secret="$(grep -E '^JWT_SECRET=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- || true)"
+  needs_secret=0
+  case "$current_secret" in
+    ""|"change-this-in-production"|"change-this-to-a-secure-random-string"|"change-this-to-a-long-random-string")
+      needs_secret=1
+      ;;
+  esac
+  if [ "$needs_secret" = "1" ]; then
+    new_secret="$(gen_secret)"
+    tmp="$(mktemp)"
+    if grep -qE '^JWT_SECRET=' "$ENV_FILE"; then
+      awk -v s="$new_secret" '
+        BEGIN { FS = OFS = "=" }
+        /^JWT_SECRET=/ { print "JWT_SECRET=" s; next }
+        { print }
+      ' "$ENV_FILE" > "$tmp"
+    else
+      cp "$ENV_FILE" "$tmp"
+      printf '\nJWT_SECRET=%s\n' "$new_secret" >> "$tmp"
+    fi
+    mv "$tmp" "$ENV_FILE"
+    log "generated JWT_SECRET (48 random bytes, hex) into .env"
+  else
+    log "JWT_SECRET already set in .env; leaving it alone"
+  fi
+fi
+
 # ---- install-time daemon proxy (transient, only if needed) ------------------
 
 DAEMON_DROPIN="/etc/systemd/system/docker.service.d/leopard-install-proxy.conf"
