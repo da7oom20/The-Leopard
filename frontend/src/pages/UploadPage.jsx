@@ -131,8 +131,12 @@ export default function UploadPage() {
       .catch(() => {});
   }, []);
 
+  // Always attach the token if we have one, whether or not search auth is
+  // currently required. The backend only reads it when optionalSearchAuth
+  // is active; sending it otherwise is a no-op. This eliminates a race
+  // where a search kicked off before /settings/search-auth resolved would
+  // fire without a token, get 401, and trip the session-expired event.
   const getAuthHeaders = () => {
-    if (!searchAuthRequired) return {};
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
