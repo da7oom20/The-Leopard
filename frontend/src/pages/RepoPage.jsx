@@ -18,6 +18,13 @@ export default function RepoPage() {
     const [downloadingId, setDownloadingId] = useState(null);
     const LIMIT = 10;
     const [searchAuthRequired, setSearchAuthRequired] = useState(false);
+    // Track whether we've finished checking /settings/search-auth. Without
+    // this the initial /repo load raced the settings fetch: if auth was
+    // required the request went out with no Authorization header, got 401,
+    // and fired the shared session-expired event (which auto-logged the
+    // user out and painted both "Failed to load search history" and
+    // "Your session has expired" banners).
+    const [authSettingsLoaded, setAuthSettingsLoaded] = useState(false);
 
     // Filters
     const [filterClient, setFilterClient] = useState('');
@@ -31,22 +38,28 @@ export default function RepoPage() {
         apiFetch(`${API_URL}/settings/search-auth`)
           .then(r => r.json())
           .then(data => setSearchAuthRequired(!!data.requireSearchAuth))
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => setAuthSettingsLoaded(true));
     }, []);
 
+    // Always attach the bearer token if we have one, regardless of whether
+    // auth is currently required. The backend only reads it when
+    // optionalSearchAuth is active; sending it when it's not needed is a
+    // no-op. This makes the client resilient to the settings fetch
+    // resolving after the first data fetch.
     const getAuthHeaders = () => {
-        if (!searchAuthRequired) return {};
         const token = localStorage.getItem('token');
         return token ? { Authorization: `Bearer ${token}` } : {};
     };
 
-    // Fetch filter options
+    // Fetch filter options once we know the auth requirement.
     useEffect(() => {
+        if (!authSettingsLoaded) return;
         apiFetch(`${API_URL}/repo/filters`, { headers: getAuthHeaders() })
           .then(r => r.json())
           .then(data => setFilterOptions({ clients: data.clients || [], filterTypes: data.filterTypes || [] }))
           .catch(() => {});
-    }, []);
+    }, [authSettingsLoaded]);
 
     const buildQuery = (nextOffset) => {
         const params = new URLSearchParams({ offset: nextOffset, limit: LIMIT });
@@ -76,9 +89,14 @@ export default function RepoPage() {
         }
     };
 
+    // Wait for the auth setting to be known before firing the first
+    // /repo request — otherwise we'd send no token, get 401, and trigger
+    // a spurious session-expired event. Intentionally depends only on
+    // authSettingsLoaded so this fires exactly once on first load.
     useEffect(() => {
+        if (!authSettingsLoaded) return;
         loadPage(0);
-    }, []);
+    }, [authSettingsLoaded]);
 
     const applyFilters = () => {
         setItems([]);

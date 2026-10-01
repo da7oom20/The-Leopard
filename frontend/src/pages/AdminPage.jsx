@@ -122,7 +122,7 @@ const TABS = [
 const getApiUrl = () => process.env.REACT_APP_API_URL || '/api';
 
 export default function AdminPage() {
-  const { token, logout } = useContext(AuthContext);
+  const { token, login, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const location = useLocation();
   const API_URL = getApiUrl();
