@@ -705,8 +705,17 @@ export default function UploadPage() {
                             <span className={`px-3 py-1 text-sm rounded-full
                               ${item.status === 'hit'
                                 ? 'bg-red-900/50 text-red-300 border border-red-700'
-                                : 'bg-green-900/50 text-green-300 border border-green-700'}`}>
-                              {item.status === 'hit' ? 'Hit Detected' : 'No Hit'}
+                                : item.status === 'error'
+                                  ? 'bg-amber-900/50 text-amber-300 border border-amber-700'
+                                  : 'bg-green-900/50 text-green-300 border border-green-700'}`}
+                              title={item.status === 'error'
+                                ? 'Search did not complete — SIEM did not return a result. Treat as unknown, not clean. Re-run the hunt or check backend logs.'
+                                : undefined}>
+                              {item.status === 'hit'
+                                ? 'Hit Detected'
+                                : item.status === 'error'
+                                  ? 'Search Error — Unknown'
+                                  : 'No Hit'}
                             </span>
                           </li>
                         ))}

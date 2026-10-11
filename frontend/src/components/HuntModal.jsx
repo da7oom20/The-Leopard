@@ -158,9 +158,16 @@ export default function HuntModal({ isOpen, onClose, clientOptions, onHuntResult
       const API_URL = process.env.REACT_APP_API_URL || '/api';
       const clientPayload = allClients ? 'ALL' : selectedClients.join(',');
 
+      // Always attach the token if we have one. The backend's
+      // optionalSearchAuth ignores the header when auth isn't required,
+      // so this is a no-op in that case and prevents spurious 401s when
+      // requireSearchAuth is on (same pattern as UploadPage/RepoPage).
+      const token = localStorage.getItem('token');
+      const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
       const res = await apiFetch(`${API_URL}/hunt`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({
           tiSourceId: selectedSource,
           iocType,
