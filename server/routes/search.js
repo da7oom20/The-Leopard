@@ -884,7 +884,19 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
           logSources: logSources.length
         });
 
-        const query = adapter.buildQuery(filterType, iocs, { minutesBack, logSourceListId, logSources, customFields, customQueryTemplate });
+        // Shared-SIEM clients carry an entityIds array in extraConfig so each
+        // search is scoped to that tenant's root entities (prevents data bleed
+        // on a multi-tenant LogRhythm). Dedicated SIEMs have no entityIds and
+        // the adapter skips the filter injection entirely.
+        let entityIds = null;
+        try {
+          const raw = apiKeyObj.extraConfig;
+          const cfg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (cfg && Array.isArray(cfg.entityIds) && cfg.entityIds.length > 0) {
+            entityIds = cfg.entityIds;
+          }
+        } catch (e) { /* ignore malformed extraConfig */ }
+        const query = adapter.buildQuery(filterType, iocs, { minutesBack, logSourceListId, logSources, entityIds, customFields, customQueryTemplate });
         const searchResult = await adapter.executeSearch(query);
 
         let finalResults = [];

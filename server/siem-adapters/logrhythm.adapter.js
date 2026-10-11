@@ -490,7 +490,7 @@ class LogRhythmAdapter extends BaseSiemAdapter {
    * @returns {Object} - LogRhythm search body
    */
   buildQuery(filterType, values, options = {}) {
-    const { minutesBack = 5, logSourceListId, logSources, customFields, customQueryTemplate } = options;
+    const { minutesBack = 5, logSourceListId, logSources, entityIds, customFields, customQueryTemplate } = options;
     // logSources here are individual LR log sources (from /lr-admin-api/logsources).
     // The legacy logSourceListId option still maps into queryLogSourceLists.
     const queryLogSourcesIds = Array.isArray(logSources) && logSources.length > 0
@@ -568,6 +568,29 @@ class LogRhythmAdapter extends BaseSiemAdapter {
 
     if (!filterGroup) {
       throw new Error(`Unsupported filterType: ${filterType}`);
+    }
+
+    // Shared-SIEM entity scoping. When a client lives on a multi-tenant LR
+    // instance, each ApiKey carries entityIds in extraConfig and we AND a
+    // RootEntity IN (ids) filter into the top-level filter group so the
+    // search only returns logs from that tenant's hosts and log sources.
+    // Dedicated SIEMs leave entityIds empty/null — no filter is injected.
+    const entityIdList = Array.isArray(entityIds)
+      ? entityIds.map(n => parseInt(n, 10)).filter(n => Number.isFinite(n))
+      : [];
+    if (entityIdList.length > 0 && Array.isArray(filterGroup.filterItems)) {
+      filterGroup.filterItems.push({
+        filterItemType: 'Filter',
+        fieldOperator: 'And',
+        filterMode: 'FilterIn',
+        filterType: 'RootEntity',
+        values: entityIdList.map(id => ({
+          filterType: 'RootEntity',
+          valueType: 'Int32',
+          value: id
+        })),
+        name: 'Root Entity'
+      });
     }
 
     base.queryFilter = {
