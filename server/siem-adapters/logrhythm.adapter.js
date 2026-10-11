@@ -575,22 +575,44 @@ class LogRhythmAdapter extends BaseSiemAdapter {
     // RootEntity IN (ids) filter into the top-level filter group so the
     // search only returns logs from that tenant's hosts and log sources.
     // Dedicated SIEMs leave entityIds empty/null — no filter is injected.
+    //
+    // Structural note: LR's filter engine misbehaves when a top-level
+    // filterItems array mixes plain Filter items with nested Group items
+    // at the same level (observed: it stops applying the Filter siblings
+    // when a Group sibling is present, so the search returns ALL entities
+    // regardless of RootEntity). To avoid that, we wrap the IOC-specific
+    // filters (which can include nested OR-groups for multi-value fields)
+    // in their own sub-Group and keep RootEntity as a sibling Filter at
+    // the outer level. This matches the compound-filter pattern used by
+    // LR's own search UI (RootEntity + MsgSourceType + VendorMsgID, all
+    // siblings, all flat Filter items).
     const entityIdList = Array.isArray(entityIds)
       ? entityIds.map(n => parseInt(n, 10)).filter(n => Number.isFinite(n))
       : [];
     if (entityIdList.length > 0 && Array.isArray(filterGroup.filterItems)) {
-      filterGroup.filterItems.push({
-        filterItemType: 'Filter',
-        fieldOperator: 'And',
-        filterMode: 'FilterIn',
-        filterType: 'RootEntity',
-        values: entityIdList.map(id => ({
+      const iocItems = filterGroup.filterItems;
+      filterGroup.filterItems = [
+        {
+          filterItemType: 'Filter',
+          fieldOperator: 'And',
+          filterMode: 'FilterIn',
           filterType: 'RootEntity',
-          valueType: 'Int32',
-          value: id
-        })),
-        name: 'Root Entity'
-      });
+          values: entityIdList.map(id => ({
+            filterType: 'RootEntity',
+            valueType: 'Int32',
+            value: id
+          })),
+          name: 'Root Entity'
+        },
+        {
+          filterItemType: 'Group',
+          fieldOperator: 'And',
+          filterMode: 'FilterIn',
+          filterGroupOperator: 'And',
+          filterItems: iocItems,
+          name: 'IOC Filters'
+        }
+      ];
     }
 
     base.queryFilter = {
