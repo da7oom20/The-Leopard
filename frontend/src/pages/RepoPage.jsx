@@ -160,6 +160,61 @@ export default function RepoPage() {
         }
     };
 
+    // Which resultId is currently being re-run. Only one at a time so the
+    // UI stays responsive and we don't flood the SIEM with concurrent
+    // re-runs from a double-click.
+    const [rerunningId, setRerunningId] = useState(null);
+    const rerunFilter = async (resultId) => {
+        if (rerunningId) return;
+        setRerunningId(resultId);
+        setErrorInfo({ error: '', suggestion: '', category: '' });
+        try {
+            const res = await apiFetch(`${API_URL}/hunt/rerun`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                body: JSON.stringify({ resultId })
+            });
+            if (!res.ok) {
+                let msg = 'Re-run failed';
+                try { const d = await res.json(); msg = d.error || msg; } catch (_) {}
+                throw new Error(msg);
+            }
+            const updated = await res.json();
+            // Patch the single row in-place. The hunt list structure is
+            // items[].clients[].filters[], so find and replace by resultId.
+            setItems(prev => prev.map(h => ({
+                ...h,
+                clients: h.clients.map(c => ({
+                    ...c,
+                    filters: c.filters.map(f => f.resultId === resultId ? {
+                        ...f,
+                        hit: updated.hit,
+                        resultCount: updated.resultCount,
+                        searchDuration: updated.searchDuration,
+                        errorMessage: updated.errorMessage || null
+                    } : f)
+                }))
+            })));
+        } catch (e) {
+            setErrorInfo({
+                error: e.message || 'Re-run failed.',
+                suggestion: 'Check SIEM connectivity and that this client is still active.',
+                category: 'server'
+            });
+        } finally {
+            setRerunningId(null);
+        }
+    };
+
+    const hitChipClass = (hit) =>
+        hit === 'hit'
+            ? 'bg-red-900/50 text-red-300 border border-red-700'
+            : hit === 'error'
+                ? 'bg-amber-900/50 text-amber-300 border border-amber-700'
+                : 'bg-green-900/50 text-green-300 border border-green-700';
+    const hitLabel = (hit) =>
+        hit === 'hit' ? 'Hit' : hit === 'error' ? 'Error' : 'No Hit';
+
     const hasActiveFilters = filterClient || filterType || filterHit || filterDateFrom || filterDateTo;
 
     return (
@@ -292,81 +347,122 @@ export default function RepoPage() {
                     className="mb-4"
                 />
 
-                {/* Table */}
-                <div className="overflow-x-auto bg-zinc-900 border border-zinc-700 rounded-lg">
-                    <table className="min-w-full text-sm" aria-label="Search history table">
-                        <thead className="bg-zinc-800/50 text-zinc-300">
-                            <tr>
-                                <th scope="col" className="text-left px-4 py-3 font-medium">Date</th>
-                                <th scope="col" className="text-left px-4 py-3 font-medium">Client</th>
-                                <th scope="col" className="text-left px-4 py-3 font-medium">IOC Types</th>
-                                <th scope="col" className="text-left px-4 py-3 font-medium">Hit?</th>
-                                <th scope="col" className="text-left px-4 py-3 font-medium">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-800">
-                            {items.length === 0 && !loading && (
-                                <tr>
-                                    <td colSpan={5} className="px-4 py-12 text-center">
-                                        <svg className="mx-auto h-10 w-10 text-zinc-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                                        </svg>
-                                        <p className="text-zinc-500">{hasActiveFilters ? 'No results match your filters.' : 'No search submissions yet.'}</p>
-                                        <p className="text-zinc-600 text-xs mt-1">{hasActiveFilters ? 'Try adjusting or clearing the filters.' : 'Completed searches will appear here.'}</p>
-                                    </td>
-                                </tr>
-                            )}
+                {/* Grouped hunt cards */}
+                {items.length === 0 && !loading && (
+                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-12 text-center">
+                        <svg className="mx-auto h-10 w-10 text-zinc-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        <p className="text-zinc-500">{hasActiveFilters ? 'No results match your filters.' : 'No search submissions yet.'}</p>
+                        <p className="text-zinc-600 text-xs mt-1">{hasActiveFilters ? 'Try adjusting or clearing the filters.' : 'Completed searches will appear here.'}</p>
+                    </div>
+                )}
 
-                            {items.map(row => (
-                                <tr key={row.id} className="hover:bg-zinc-800/50 transition-colors">
-                                    <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-zinc-300">{row.client}</td>
-                                    <td className="px-4 py-3 text-zinc-400">{row.iocTypes || '-'}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                            row.hit === 'hit'
-                                                ? 'bg-red-900/50 text-red-300 border border-red-700'
-                                                : row.hit === 'error'
-                                                    ? 'bg-amber-900/50 text-amber-300 border border-amber-700'
-                                                    : 'bg-green-900/50 text-green-300 border border-green-700'
-                                        }`}>
-                                            {row.hit || 'no hit'}
+                <div className="space-y-4">
+                    {items.map(hunt => (
+                        <div key={hunt.huntId} className="bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden">
+                            {/* Hunt header */}
+                            <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                    <div className="text-sm font-medium text-zinc-100 break-all">
+                                        {hunt.fileName || '(no file name)'}
+                                    </div>
+                                    <div className="text-xs text-zinc-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+                                        <span>{new Date(hunt.createdAt).toLocaleString()}</span>
+                                        <span>{hunt.clients.length} client{hunt.clients.length !== 1 ? 's' : ''}</span>
+                                        {hunt.minutesBack != null && (
+                                            <span>window: {hunt.minutesBack} min</span>
+                                        )}
+                                        <span className="font-mono text-[0.65rem] text-zinc-600" title={hunt.huntId}>
+                                            hunt id: {hunt.huntId.length > 40 ? hunt.huntId.slice(0, 40) + '…' : hunt.huntId}
                                         </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <button
-                                            onClick={() => downloadCsvForRow(row.id)}
-                                            disabled={downloadingId === row.id}
-                                            className="px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 inline-flex items-center gap-1.5"
-                                            aria-label={`Download CSV for submission ${row.id}`}
-                                        >
-                                            {downloadingId === row.id && (
-                                                <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                </svg>
-                                            )}
-                                            {downloadingId === row.id ? 'Downloading...' : 'Download CSV'}
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
+                                    </div>
+                                </div>
+                            </div>
 
-                            {loading && (
-                                <tr>
-                                    <td colSpan={5} className="px-4 py-6 text-center">
-                                        <div className="flex items-center justify-center gap-2 text-zinc-400">
-                                            <svg className="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                            </svg>
-                                            <span>Loading...</span>
+                            {/* Per-client sections */}
+                            <div className="divide-y divide-zinc-800">
+                                {hunt.clients.map(c => (
+                                    <div key={c.client} className="px-4 py-3">
+                                        <div className="text-sm font-semibold text-zinc-200 mb-2 flex items-center gap-2">
+                                            <span>{c.client}</span>
+                                            <span className="text-xs font-normal text-zinc-500">({c.siemType || 'logrhythm'})</span>
                                         </div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-sm">
+                                                <thead className="text-zinc-400 text-xs uppercase tracking-wider">
+                                                    <tr>
+                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">IOC Type</th>
+                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">IOCs</th>
+                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">Status</th>
+                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">Results</th>
+                                                        <th scope="col" className="text-right py-1.5 pl-4 font-medium">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-zinc-800/60">
+                                                    {c.filters.map(f => (
+                                                        <tr key={f.resultId}>
+                                                            <td className="py-2 pr-4 text-zinc-200 whitespace-nowrap">{f.filterType || '-'}</td>
+                                                            <td className="py-2 pr-4 text-zinc-400">{f.iocCount}</td>
+                                                            <td className="py-2 pr-4">
+                                                                <span
+                                                                    className={`px-2 py-0.5 rounded text-xs font-medium ${hitChipClass(f.hit)}`}
+                                                                    title={f.hit === 'error' && f.errorMessage ? f.errorMessage : undefined}
+                                                                >
+                                                                    {hitLabel(f.hit)}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-2 pr-4 text-zinc-300">{f.resultCount}</td>
+                                                            <td className="py-2 pl-4 text-right whitespace-nowrap">
+                                                                <div className="inline-flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={() => rerunFilter(f.resultId)}
+                                                                        disabled={rerunningId !== null}
+                                                                        className="px-2.5 py-1 rounded-md bg-zinc-700 text-zinc-100 hover:bg-zinc-600 transition text-xs focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:opacity-50 inline-flex items-center gap-1.5"
+                                                                        aria-label={`Re-run ${f.filterType} for ${c.client}`}
+                                                                        title={rerunningId === f.resultId ? 'Re-running…' : 'Re-run this search'}
+                                                                    >
+                                                                        {rerunningId === f.resultId && (
+                                                                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                                            </svg>
+                                                                        )}
+                                                                        {rerunningId === f.resultId ? 'Running…' : 'Re-run'}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => downloadCsvForRow(f.resultId)}
+                                                                        disabled={downloadingId === f.resultId}
+                                                                        className="px-2.5 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                                                                        aria-label={`Download CSV for ${c.client} / ${f.filterType}`}
+                                                                        title="Download CSV"
+                                                                    >
+                                                                        {downloadingId === f.resultId ? '…' : 'CSV'}
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+
+                    {loading && (
+                        <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-6 text-center">
+                            <div className="flex items-center justify-center gap-2 text-zinc-400">
+                                <svg className="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                <span>Loading...</span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Pagination */}
@@ -384,7 +480,7 @@ export default function RepoPage() {
                 {/* Summary */}
                 {items.length > 0 && (
                     <p className="text-center text-zinc-500 text-xs mt-3">
-                        Showing {items.length} submission{items.length !== 1 ? 's' : ''}
+                        Showing {items.length} hunt{items.length !== 1 ? 's' : ''}
                         {hasMore ? ' (more available)' : ''}
                     </p>
                 )}
