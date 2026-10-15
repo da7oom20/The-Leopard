@@ -146,6 +146,7 @@ router.post('/hunt', searchLimiter, optionalSearchAuth, async (req, res) => {
     }
 
     const huntFileName = `hunt_${Date.now()}_${tiSource.platformType}`;
+    const huntId = `${huntFileName}-${Date.now()}`;
     const iocValues = iocList.map(ioc => ioc.value);
     const iocGroups = {};
     iocGroups[iocType] = iocValues.map(value => ({ ioc: value, type: iocType }));
@@ -154,13 +155,13 @@ router.post('/hunt', searchLimiter, optionalSearchAuth, async (req, res) => {
     await acquireSearchSlot();
     let searchResults;
     try {
-      searchResults = await logsDigging(iocGroups, huntFileName, 'hunt', minutesBack, apiKeys);
+      searchResults = await logsDigging(iocGroups, huntFileName, 'hunt', minutesBack, apiKeys, undefined, huntId);
     } finally {
       releaseSearchSlot();
     }
 
     const createdResults = await Result.findAll({
-      where: { fileName: huntFileName },
+      where: { huntId },
       attributes: ['id', 'client', 'filterType', 'hit', 'createdAt'],
       order: [['createdAt', 'DESC']],
       limit: 1000
@@ -172,7 +173,8 @@ router.post('/hunt', searchLimiter, optionalSearchAuth, async (req, res) => {
     const errors = createdResults.filter(r => r.hit === 'error').length;
 
     res.json({
-      huntId: huntFileName,
+      huntId,
+      fileName: huntFileName,
       iocsFetched: iocList.length,
       iocList: iocValues.slice(0, 200),
       siemResults: createdResults.map(r => ({ client: r.client, filterType: r.filterType, status: r.hit })),
@@ -261,6 +263,7 @@ router.post('/upload', searchLimiter, optionalSearchAuth, upload.single('file'),
     }
 
     const uploadedFileName = req.file?.originalname || `upload-${Date.now()}.txt`;
+    const huntId = `${uploadedFileName}-${Date.now()}`;
 
     let apiKeys;
     if (!client?.trim() || client.trim() === 'ALL') {
@@ -295,14 +298,14 @@ router.post('/upload', searchLimiter, optionalSearchAuth, upload.single('file'),
     await acquireSearchSlot();
     let searchResults;
     try {
-      searchResults = await logsDigging(iocGroups, uploadedFileName, username, minutesBack, apiKeys, onProgress);
+      searchResults = await logsDigging(iocGroups, uploadedFileName, username, minutesBack, apiKeys, onProgress, huntId);
     } finally {
       releaseSearchSlot();
       completeSearchTracker(searchId);
     }
 
     const createdResults = await Result.findAll({
-      where: { fileName: uploadedFileName },
+      where: { huntId },
       attributes: ['id', 'client', 'filterType', 'hit', 'createdAt'],
       order: [['createdAt', 'DESC']],
       limit: 1000
@@ -310,6 +313,7 @@ router.post('/upload', searchLimiter, optionalSearchAuth, upload.single('file'),
 
     res.json({
       searchId,
+      huntId,
       uploadId: uploadedFileName,
       resultIds: createdResults.map(r => r.id),
       siemResults: createdResults.map(r => ({ client: r.client, filterType: r.filterType, status: r.hit })),
@@ -326,14 +330,236 @@ router.post('/upload', searchLimiter, optionalSearchAuth, upload.single('file'),
   }
 });
 
+// ============ RE-RUN A SINGLE (CLIENT, FILTER TYPE) ============
+
+// Re-runs the search for exactly one Result row — same client, same filter
+// type, same IOCs it originally ran with, same time window. Updates the row
+// in place (replacing hit/resultCount/details/searchDuration/updatedAt).
+// Scope: one row at a time; the Repo page fires one request per button.
+router.post('/hunt/rerun', searchLimiter, optionalSearchAuth, async (req, res) => {
+  const { resultId } = req.body || {};
+  if (!resultId || !Number.isInteger(Number(resultId))) {
+    return res.status(400).json({
+      error: 'resultId (integer) is required.',
+      category: 'validation'
+    });
+  }
+
+  try {
+    const row = await Result.findByPk(Number(resultId));
+    if (!row) {
+      return res.status(404).json({ error: 'Result row not found.', category: 'not_found' });
+    }
+
+    const details = safeParseJSON(row.details) || {};
+    const iocs = details.iocs || {};
+
+    // Build the IOC group for exactly this filter type. Hash is special:
+    // it was persisted as md5/sha1/sha256 under their own keys and also
+    // aggregated into 'hash'. For re-run, assemble the typed list the
+    // extractor would have produced.
+    const filterType = row.filterType;
+    if (!filterType) {
+      return res.status(400).json({
+        error: 'Row has no filterType — cannot re-run.',
+        category: 'validation'
+      });
+    }
+
+    const iocGroups = buildIocGroupsForRerun(filterType, iocs);
+    if (!iocGroups || Object.keys(iocGroups).length === 0) {
+      return res.status(400).json({
+        error: 'Row has no stored IOCs — nothing to re-run.',
+        suggestion: 'Re-upload the original file to run this filter again.',
+        category: 'validation'
+      });
+    }
+
+    const apiKey = await ApiKey.findOne({ where: { client: row.client, isActive: true } });
+    if (!apiKey) {
+      return res.status(400).json({
+        error: `No active SIEM connection for client "${row.client}".`,
+        suggestion: 'Check Admin → SIEM Clients.',
+        category: 'validation'
+      });
+    }
+
+    const minutesBack = row.minutesBack || 5;
+
+    let adapter;
+    try {
+      adapter = getSiemAdapter((apiKey.siemType || 'logrhythm').toLowerCase(), {
+        ...(apiKey.dataValues || apiKey),
+        client: apiKey.client
+      });
+    } catch (err) {
+      return res.status(500).json({
+        error: 'Failed to construct SIEM adapter.',
+        details: err.message,
+        category: 'server'
+      });
+    }
+
+    // Mirror the per-client, per-filter block from logsDigging: fetch log
+    // source mapping + field mapping + entityIds, call adapter.search(),
+    // and update the row in place.
+    const siemType = (apiKey.siemType || 'logrhythm').toLowerCase();
+    const normalizedGroups = iocGroups;
+    const group = normalizedGroups[filterType];
+    const iocValues = group.map(({ ioc }) => deobfuscateIOC(ioc));
+
+    const logSourceRows = await MsgSource.findAll({
+      where: { client: apiKey.client, siemType, filterType }
+    });
+    const logSources = logSourceRows.map(r => ({
+      id: r.listId, listId: r.listId, guid: r.guid, name: r.name, listType: r.listType
+    }));
+    const logSourceListId = (siemType === 'logrhythm' && logSources[0]?.listId) || null;
+
+    let customFields = null;
+    try {
+      const mapping = await FieldMapping.findOne({ where: { client: apiKey.client, siemType, filterType, isApproved: true } });
+      if (mapping?.fields?.length) customFields = mapping.fields;
+    } catch (e) {}
+
+    let customQueryTemplate = null;
+    try {
+      const qt = await QueryTemplate.findOne({ where: { client: apiKey.client, siemType, filterType, isActive: true } });
+      if (qt?.template) customQueryTemplate = qt.template;
+    } catch (e) {}
+
+    let entityIds = null;
+    try {
+      const raw = apiKey.extraConfig;
+      const cfg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (cfg && Array.isArray(cfg.entityIds) && cfg.entityIds.length > 0) {
+        entityIds = cfg.entityIds;
+      }
+    } catch (e) {}
+
+    const buildOptions = { minutesBack, logSourceListId, logSources, entityIds, customFields, customQueryTemplate };
+    const startTime = Date.now();
+
+    log.info('rerun executing', {
+      resultId: row.id, client: row.client, siemType, filterType,
+      iocCount: iocValues.length, minutes: minutesBack
+    });
+
+    let finalResults = [];
+    let errorMessage = null;
+    try {
+      if (typeof adapter.search === 'function') {
+        const result = await adapter.search(filterType, iocValues, buildOptions);
+        finalResults = result.results || [];
+        if (result.status && result.status !== 'complete') {
+          errorMessage = result.error || result.status;
+        }
+      } else {
+        const query = adapter.buildQuery(filterType, iocValues, buildOptions);
+        const sr = await adapter.executeSearch(query);
+        if (sr.taskId && !sr.complete) {
+          const pollingInterval = adapter.getPollingInterval(minutesBack);
+          const maxAttempts = adapter.getRetryLimit(minutesBack);
+          const pr = await adapter.pollResults(sr.taskId, { pollingInterval, maxAttempts });
+          if (pr.status === 'complete') {
+            finalResults = pr.results || [];
+          } else {
+            errorMessage = pr.error || pr.status;
+          }
+        } else {
+          finalResults = sr.results || [];
+        }
+      }
+    } catch (err) {
+      errorMessage = err.message;
+    }
+
+    const searchDuration = Date.now() - startTime;
+    const hasHit = !errorMessage && finalResults.length > 0;
+    const hit = errorMessage ? 'error' : (hasHit ? 'hit' : 'no hit');
+
+    const newDetails = errorMessage
+      ? JSON.stringify({ error: 'SIEM search failed', errorMessage, iocs })
+      : JSON.stringify({ result: { Items: finalResults }, iocs });
+
+    await row.update({
+      hit,
+      resultCount: errorMessage ? 0 : finalResults.length,
+      searchDuration,
+      details: newDetails
+    });
+
+    log.info('rerun complete', {
+      resultId: row.id, client: row.client, filterType, durationMs: searchDuration,
+      resultCount: errorMessage ? 0 : finalResults.length, hit
+    });
+
+    return res.json({
+      resultId: row.id,
+      client: row.client,
+      filterType,
+      hit,
+      resultCount: errorMessage ? 0 : finalResults.length,
+      searchDuration,
+      errorMessage
+    });
+  } catch (err) {
+    console.error('rerun failed:', err);
+    log.error('rerun failed', { resultId, error: err.message });
+    return res.status(500).json({ error: 'Re-run failed.', details: err.message, category: 'server' });
+  }
+});
+
+// Reconstruct the iocGroups shape (keyed by normalized filterType) that
+// logsDigging consumes, from the persisted iocs blob and a target filter.
+function buildIocGroupsForRerun(filterType, iocs) {
+  if (!iocs || typeof iocs !== 'object') return null;
+  const groups = {};
+  const push = (type, values) => {
+    if (!Array.isArray(values) || values.length === 0) return;
+    if (!groups[filterType]) groups[filterType] = [];
+    for (const ioc of values) {
+      groups[filterType].push({ ioc, type });
+    }
+  };
+
+  if (filterType === 'Hash') {
+    // iocsByType stored md5/sha1/sha256 as separate arrays — restore them
+    // under their raw-type names so logsDigging normalizes correctly.
+    push('SHA256', iocs.sha256);
+    push('SHA1', iocs.sha1);
+    push('MD5', iocs.md5);
+    // Fallback for legacy rows that only have the aggregated 'hash' key.
+    if (!groups.Hash && Array.isArray(iocs.hash)) {
+      push('SHA256', iocs.hash);
+    }
+  } else if (filterType === 'FileName') {
+    push('Filename', iocs.filename);
+  } else {
+    // IP / Domain / URL / Email
+    const key = filterType.toLowerCase();
+    push(filterType, iocs[key]);
+  }
+
+  return Object.keys(groups).length ? groups : null;
+}
+
 // ============ REPO ============
 
+// /repo returns hunts grouped by huntId, newest-first. Each hunt contains
+// per-client entries, each with its per-filter-type rows. Pagination is on
+// HUNTS (not rows), so `limit=10` returns up to 10 distinct hunts.
+//
+// Historical rows written before the huntId column existed have huntId=null;
+// those are grouped by `fileName + 5-min bucket of createdAt` so the Repo
+// page still renders them coherently.
 router.get('/repo', optionalSearchAuth, async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '10', 10)));
     const offset = Math.max(0, parseInt(req.query.offset || '0', 10));
 
-    // Build WHERE clause from filters
+    // Row-level filters still apply. If any filter is set, the hunt is
+    // included only if at least one of its rows matches.
     const where = {};
     if (req.query.client) where.client = req.query.client;
     if (req.query.filterType) where.filterType = req.query.filterType;
@@ -348,23 +574,114 @@ router.get('/repo', optionalSearchAuth, async (req, res) => {
       }
     }
 
-    const rows = await Result.findAll({ where, order: [['createdAt', 'DESC']], limit, offset });
-
-    const data = rows.map(r => {
-      const j = r.toJSON();
-      return {
-        id: j.id, createdAt: j.createdAt, client: j.client, hit: j.hit,
-        filterType: j.filterType || '', fileName: j.fileName || '',
-        iocTypes: getIocTypesFromDetails(j.details)
-      };
+    // Pull a generous row window so grouping has enough rows to form N
+    // complete hunts. A hunt typically produces 5 rows × N clients, so
+    // (limit × 50) is a comfortable upper bound without being wasteful.
+    const rowWindow = Math.max(limit * 50, 200);
+    const rows = await Result.findAll({
+      where,
+      order: [['createdAt', 'DESC']],
+      limit: rowWindow + 1 // peek for hasMore
     });
 
-    res.json({ items: data, offset, limit, hasMore: rows.length === limit });
+    // Derive a stable grouping key for each row.
+    const bucketMs = 5 * 60 * 1000;
+    const groupKey = (r) => {
+      if (r.huntId) return r.huntId;
+      // Legacy row: fileName + 5-min bucket of createdAt.
+      const bucket = Math.floor(new Date(r.createdAt).getTime() / bucketMs);
+      return `legacy:${r.fileName || 'unknown'}:${bucket}`;
+    };
+
+    // Group preserving createdAt order (newest first because rows are
+    // ordered DESC). The first row seen for a hunt becomes its anchor.
+    const huntMap = new Map();
+    for (const r of rows) {
+      const key = groupKey(r);
+      if (!huntMap.has(key)) {
+        huntMap.set(key, {
+          huntId: key,
+          fileName: r.fileName || '',
+          minutesBack: r.minutesBack ?? null,
+          createdAt: r.createdAt,
+          clientMap: new Map()
+        });
+      }
+      const hunt = huntMap.get(key);
+      // Earliest createdAt across the hunt's rows represents the dispatch.
+      if (new Date(r.createdAt) < new Date(hunt.createdAt)) {
+        hunt.createdAt = r.createdAt;
+      }
+      if (r.minutesBack != null && hunt.minutesBack == null) {
+        hunt.minutesBack = r.minutesBack;
+      }
+      if (!hunt.clientMap.has(r.client)) {
+        hunt.clientMap.set(r.client, { client: r.client, siemType: r.siemType, filters: [] });
+      }
+      const details = safeParseJSON(r.details) || {};
+      const iocs = details.iocs || {};
+      // iocCount is per filter type: the search sends every IOC that
+      // normalizeFilterType maps to this filter. For FileName the raw
+      // key is 'filename'; for Hash it's 'hash' (which aggregates md5/
+      // sha1/sha256 in iocsByType). The lookup below is defensive —
+      // tries the row's filterType first, then the raw-type family.
+      const iocCount = computeIocCountForFilter(r.filterType, iocs);
+      hunt.clientMap.get(r.client).filters.push({
+        resultId: r.id,
+        filterType: r.filterType || '',
+        hit: r.hit,
+        resultCount: r.resultCount || 0,
+        iocCount,
+        searchDuration: r.searchDuration || 0,
+        createdAt: r.createdAt,
+        errorMessage: details.errorMessage || null
+      });
+    }
+
+    // Paginate on hunts.
+    const allHunts = Array.from(huntMap.values()).sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    const page = allHunts.slice(offset, offset + limit);
+    const hasMore = allHunts.length > offset + limit || rows.length > rowWindow;
+
+    const items = page.map((h) => ({
+      huntId: h.huntId,
+      fileName: h.fileName,
+      minutesBack: h.minutesBack,
+      createdAt: h.createdAt,
+      clients: Array.from(h.clientMap.values()).map((c) => ({
+        client: c.client,
+        siemType: c.siemType,
+        filters: c.filters.sort((a, b) => a.filterType.localeCompare(b.filterType))
+      }))
+    }));
+
+    res.json({ items, offset, limit, hasMore });
   } catch (err) {
     console.error('Repo list failed:', err);
     res.status(500).json({ error: 'Failed to list recent searches' });
   }
 });
+
+// Count of IOCs sent to the SIEM for a given filter row, derived from the
+// row's details.iocs blob. filterType is the normalized filter name (Hash /
+// IP / Domain / URL / FileName / Email); iocs is the per-raw-type map
+// written in search.js (keys: sha256, sha1, md5, hash, ip, url, domain,
+// filename, email).
+function computeIocCountForFilter(filterType, iocs) {
+  if (!iocs || typeof iocs !== 'object') return 0;
+  const key = (filterType || '').toLowerCase();
+  const direct = iocs[key];
+  if (Array.isArray(direct)) return direct.length;
+  // Hash is aggregated under 'hash' at write time but 'hash' may not be
+  // populated on very old rows — fall back to the sum of md5+sha1+sha256.
+  if (key === 'hash') {
+    const parts = ['md5', 'sha1', 'sha256'];
+    return parts.reduce((s, k) => s + (Array.isArray(iocs[k]) ? iocs[k].length : 0), 0);
+  }
+  return 0;
+}
 
 // Distinct values for repo filters
 router.get('/repo/filters', optionalSearchAuth, async (req, res) => {
@@ -889,9 +1206,13 @@ async function extractIOCs(text) {
   return aggregated;
 }
 
-async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onProgress) {
+async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onProgress, huntId) {
   const huntStart = Date.now();
   const results = [];
+  // One huntId groups every (client, filterType) row of a single dispatch.
+  // Repo renders hunts as cards keyed on huntId; /hunt/rerun looks up the
+  // row by resultId and re-runs a single (client, filterType) in place.
+  if (!huntId) huntId = `${fileName}-${huntStart}`;
 
   const normalizedGroups = {};
   for (const [originalType, group] of Object.entries(iocGroups)) {
@@ -903,6 +1224,7 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
 
   const typeSummary = Object.entries(normalizedGroups).map(([t, g]) => `${t}:${g.length}`).join(',');
   log.info('hunt dispatch', {
+    huntId,
     fileName,
     user: email,
     minutes: minutesBack,
@@ -1086,7 +1408,7 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
         }, {});
 
         await Result.create({
-          client: apiKeyObj.client, siemType, hit: hasHit ? "hit" : "no hit", filterType, fileName, email,
+          client: apiKeyObj.client, siemType, hit: hasHit ? "hit" : "no hit", filterType, fileName, huntId, minutesBack, email,
           searchDuration, resultCount: finalResults.length,
           details: JSON.stringify({ result: { Items: finalResults }, iocs: iocsByType })
         });
@@ -1108,10 +1430,24 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
           category: err.category,
           hint: err.suggestion
         });
+        // Also persist iocsByType on error so a Repo-page re-run can find
+        // what to search again. Without this, every errored row stored an
+        // empty iocs:{} and re-run had nothing to work with.
+        const iocsByTypeOnError = group.reduce((acc, it) => {
+          const rawType = (it.type || '').trim().toLowerCase();
+          const clean = deobfuscateIOC(it.ioc);
+          if (!acc[rawType]) acc[rawType] = [];
+          acc[rawType].push(clean);
+          if (['md5', 'sha1', 'sha256'].includes(rawType)) {
+            if (!acc.hash) acc.hash = [];
+            acc.hash.push(clean);
+          }
+          return acc;
+        }, {});
         await Result.create({
-          client: apiKeyObj.client, siemType, hit: "error", filterType, fileName, email,
+          client: apiKeyObj.client, siemType, hit: "error", filterType, fileName, huntId, minutesBack, email,
           searchDuration: Date.now() - startTime, resultCount: 0,
-          details: JSON.stringify({ error: 'SIEM search failed', iocs: {} })
+          details: JSON.stringify({ error: 'SIEM search failed', errorMessage: err.message, iocs: iocsByTypeOnError })
         });
         if (onProgress) onProgress(apiKeyObj.client, filterType, 'error');
       }

@@ -28,6 +28,20 @@ const Result = sequelize.define('Result', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  // Groups all per-(client, filterType) rows of a single hunt dispatch.
+  // Set once per /hunt or /upload invocation (see search.js dispatcher)
+  // and used by /repo to render hunts as cards and by /hunt/rerun to
+  // re-run a single filter in place.
+  huntId: {
+    type: DataTypes.STRING(64),
+    allowNull: true
+  },
+  // Time window the hunt was dispatched with, in minutes. Persisted so
+  // /hunt/rerun can re-execute the search with the same horizon.
+  minutesBack: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
   email: {
     type: DataTypes.STRING,
     allowNull: true,
@@ -61,7 +75,8 @@ const Result = sequelize.define('Result', {
     { fields: ['hit'] },
     // Used by SIEM type filtering
     { fields: ['siemType'] },
-
+    // Used by /repo grouped view (list hunts newest-first)
+    { fields: ['huntId'] },
   ]
 });
 
