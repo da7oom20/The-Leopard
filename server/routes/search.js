@@ -756,6 +756,52 @@ async function extractIOCs(text) {
 
   const seenHashValues = new Set();
 
+  // Collect URL + Domain match ranges first so filename extraction can skip
+  // substrings that live inside a captured URL or domain. Without this, a
+  // URL like "https://evil.site/owa/auth/logon.aspx" leaks "logon.aspx" as
+  // a filename IOC — a generic OWA endpoint that substring-matches every
+  // GET to logon.aspx in the target environment (classic FP source).
+  function collectRanges(regex) {
+    const ranges = [];
+    const r = new RegExp(regex.source, regex.flags.includes('g') ? regex.flags : regex.flags + 'g');
+    let m;
+    while ((m = r.exec(text)) !== null) {
+      ranges.push([m.index, m.index + m[0].length]);
+      if (m.index === r.lastIndex) r.lastIndex++;
+    }
+    return ranges;
+  }
+  // Only URL ranges are used to suppress filename matches. Domain ranges
+  // are deliberately excluded: every filename-looking token (`malware.exe`,
+  // `StarkMeet.zip`) also matches the domain regex because `.exe`/`.zip` fit
+  // the 2-63-char TLD pattern — using domain ranges would suppress every
+  // standalone filename IOC. URL ranges are the correct container; a
+  // filename-shaped token embedded inside a URL (like `logon.aspx` inside
+  // `https://.../auth/logon.aspx?...`) is the actual FP class.
+  const urlRanges = collectRanges(urlRegex);
+  // Proper subrange: filename span sits inside a URL span and does NOT
+  // cover the exact same characters. Equality would mean the "URL" match
+  // and the "filename" match are the same token (e.g. the whole string
+  // is just `malware.exe` with no scheme — the URL regex won't match it,
+  // but belt-and-braces). A filename that ends exactly at the URL end
+  // (`https://x/x.exe`) is still a proper subrange because its start is
+  // strictly after the URL start.
+  const isInsideUrl = (start, end) =>
+    urlRanges.some(([s, e]) =>
+      start >= s && end <= e && !(start === s && end === e)
+    );
+
+  // Universally generic web-app filenames that always match standard
+  // IIS/Apache/Nginx logs. Even when a TI feed explicitly lists one of
+  // these, the signal-to-noise ratio is zero. Compare case-insensitively.
+  const FILENAME_STOPLIST = new Set([
+    'logon.aspx', 'login.aspx', 'default.aspx', 'error.aspx',
+    'logon.htm', 'logon.html', 'login.htm', 'login.html',
+    'index.html', 'index.htm', 'index.php', 'default.html', 'default.htm',
+    'web.config', 'favicon.ico', 'robots.txt', 'sitemap.xml',
+    'crossdomain.xml', 'clientaccesspolicy.xml'
+  ]);
+
   function addMatches(regex, type, LogRhythmType, LogRhythmListType, skipSeen) {
     const matches = text.match(regex);
     if (matches) {
@@ -767,13 +813,27 @@ async function extractIOCs(text) {
     }
   }
 
+  function addFilenameMatches(regex, type, LogRhythmType, LogRhythmListType) {
+    const r = new RegExp(regex.source, regex.flags.includes('g') ? regex.flags : regex.flags + 'g');
+    let m;
+    while ((m = r.exec(text)) !== null) {
+      const value = m[0];
+      const start = m.index;
+      const end = start + value.length;
+      if (m.index === r.lastIndex) r.lastIndex++;
+      if (isInsideUrl(start, end)) continue;
+      if (FILENAME_STOPLIST.has(value.toLowerCase().trim())) continue;
+      iocs.push({ ioc: value, type, LogRhythmType, LogRhythmListType });
+    }
+  }
+
   addMatches(sha256Regex, 'SHA256', ['Hash'], 'GeneralValue', false);
   addMatches(sha1Regex, 'SHA1', ['Hash'], 'GeneralValue', true);
   addMatches(md5Regex, 'MD5', ['Hash'], 'GeneralValue', true);
   addMatches(urlRegex, 'URL', ['URL', 'DomainImpacted', 'HostName', 'DomainOrigin'], 'GeneralValue');
   addMatches(ipRegex, 'IP', 'None', 'IP');
   addMatches(domainRegex, 'Domain', ['DomainImpacted', 'HostName', 'DomainOrigin', 'URL'], 'GeneralValue');
-  addMatches(filenameRegex, 'Filename', ['ThreatName', 'ParentProcessName', 'ObjectName', 'Process', 'Object'], 'GeneralValue');
+  addFilenameMatches(filenameRegex, 'Filename', ['ThreatName', 'ParentProcessName', 'ObjectName', 'Process', 'Object'], 'GeneralValue');
   addMatches(emailRegex, 'Email', ['User'], 'GeneralValue');
 
   const unique = [];
