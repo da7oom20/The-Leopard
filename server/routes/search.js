@@ -802,6 +802,34 @@ async function extractIOCs(text) {
     'crossdomain.xml', 'clientaccesspolicy.xml'
   ]);
 
+  // The domain regex's TLD part is `[a-zA-Z]{2,63}`, which happily matches
+  // common file extensions (`.exe`, `.pdf`, `.aspx`, `.zip`, `.txt`), so a
+  // standalone filename token like `malware.exe` or `cd8c...Lic.txt` leaks
+  // through as a Domain IOC. In LR this noise is low-signal (the SQLPattern
+  // substring usually matches nothing), but it inflates the Domain batch
+  // and shows up on the Repo page as pretend-domains.
+  //
+  // Fix: after extracting Domain matches, drop any whose last-label TLD is
+  // a known file extension. Mirrors the extensions the filename regex
+  // already recognizes; digit-containing extensions (`.ps1`, `.7z`,
+  // `.bz2`) can't match `[a-zA-Z]{2,63}` so they're not in this set.
+  const FILE_EXTENSION_TLDS = new Set([
+    'exe', 'dll', 'scr', 'bat', 'cmd', 'vbs', 'vbe', 'js', 'jse',
+    'wsf', 'wsh', 'msi', 'msp', 'jar', 'pif', 'cpl', 'sys', 'lnk',
+    'reg', 'sct', 'doc', 'docx', 'docm', 'dotm', 'dot',
+    'xls', 'xlsx', 'xlsm', 'xltm', 'ppt', 'pptx', 'pptm', 'rtf', 'pdf',
+    'htm', 'html', 'php', 'asp', 'aspx', 'jsp',
+    'psd', 'iso', 'img', 'bin', 'apk', 'ipa',
+    'zip', 'rar', 'gz', 'tar', 'txt'
+  ]);
+  function hasFileExtensionTLD(domainMatch) {
+    const normalized = domainMatch.replace(/\[\.\]|\(dot\)/g, '.');
+    const idx = normalized.lastIndexOf('.');
+    if (idx < 0) return false;
+    const tld = normalized.slice(idx + 1).toLowerCase();
+    return FILE_EXTENSION_TLDS.has(tld);
+  }
+
   function addMatches(regex, type, LogRhythmType, LogRhythmListType, skipSeen) {
     const matches = text.match(regex);
     if (matches) {
@@ -810,6 +838,15 @@ async function extractIOCs(text) {
         iocs.push({ ioc: m, type, LogRhythmType, LogRhythmListType });
         if (skipSeen !== undefined) seenHashValues.add(m);
       });
+    }
+  }
+
+  function addDomainMatches(regex, type, LogRhythmType, LogRhythmListType) {
+    const matches = text.match(regex);
+    if (!matches) return;
+    for (const m of matches) {
+      if (hasFileExtensionTLD(m)) continue;
+      iocs.push({ ioc: m, type, LogRhythmType, LogRhythmListType });
     }
   }
 
@@ -832,7 +869,7 @@ async function extractIOCs(text) {
   addMatches(md5Regex, 'MD5', ['Hash'], 'GeneralValue', true);
   addMatches(urlRegex, 'URL', ['URL', 'DomainImpacted', 'HostName', 'DomainOrigin'], 'GeneralValue');
   addMatches(ipRegex, 'IP', 'None', 'IP');
-  addMatches(domainRegex, 'Domain', ['DomainImpacted', 'HostName', 'DomainOrigin', 'URL'], 'GeneralValue');
+  addDomainMatches(domainRegex, 'Domain', ['DomainImpacted', 'HostName', 'DomainOrigin', 'URL'], 'GeneralValue');
   addFilenameMatches(filenameRegex, 'Filename', ['ThreatName', 'ParentProcessName', 'ObjectName', 'Process', 'Object'], 'GeneralValue');
   addMatches(emailRegex, 'Email', ['User'], 'GeneralValue');
 
