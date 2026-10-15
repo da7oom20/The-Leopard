@@ -182,7 +182,7 @@ See [`docs/API.md`](docs/API.md) for the full REST surface.
 
 - **Seven SIEM adapters** with a uniform query contract. The same IOC list produces a LogRhythm search-task, a Splunk SPL job, a QRadar AQL search, an Elastic DSL, a Wazuh indexer query, or a ManageEngine v2 search — no adapter-specific UI.
 - **Log-source scoping across all SIEMs**. One admin UI, per-(client, IOC type) checkbox selection, per-SIEM terminology (Indexes / Log Sources / Agents). Empty mapping still works — it just means "scan everything."
-- **Entity-root grouping for LogRhythm.** 72 entities collapse to 16 logical roots in the filter ("Alpha" pill covers Alpha + Alpha-Linux Devices + Alpha-Security Controls + …).
+- **Entity-root grouping for LogRhythm.** Tens of fine-grained entities collapse to a smaller set of logical roots in the filter (e.g. an "Alpha" pill covers Alpha + Alpha-Linux Devices + Alpha-Security Controls + …).
 - **Hunt Mode**: one click — pick a TI source and IOC type, select client(s), it pulls fresh IOCs and fans the hunt out.
 - **Field Discovery (Recon)**: analyze raw logs from your SIEM to discover which fields actually carry IOCs in your schema, then approve the mappings for search.
 - **Structured logger + troubleshooting runbook**. Every lifecycle event (boot, setup transitions, hunt dispatch, per-SIEM query, shutdown) emits timestamped, level-tagged, area-tagged log lines with `key=value` context. Grep recipes in [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).

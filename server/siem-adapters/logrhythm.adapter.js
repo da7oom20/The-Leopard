@@ -227,10 +227,10 @@ class LogRhythmAdapter extends BaseSiemAdapter {
    * Derive the logical "root" entity name by splitting on hierarchy
    * separators. Most LR deployments don't populate parentEntityId on the
    * entities API, so we fall back to the naming convention:
-   *   "Alpha-Linux Devices"           → "Alpha"
-   *   "SD - Cloud - Security Ctrl"  → "SD"
+   *   "Alpha-Linux Devices"         → "Alpha"
+   *   "Alpha - Cloud - Sec Ctrl"    → "Alpha"
    *   "Parent/Child"                → "Parent"
-   *   "Alpha"                         → "Alpha"
+   *   "Alpha"                       → "Alpha"
    */
   deriveRootName(entityName, fullName) {
     const candidate = (fullName || entityName || '').trim();
