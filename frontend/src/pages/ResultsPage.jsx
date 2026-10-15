@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 import Footer from '../components/Footer';
+import { LeopardLogoCompact } from '../components/Logo';
 import ErrorAlert, { parseApiError } from '../components/ErrorAlert';
 
 export default function ResultsPage() {
@@ -58,19 +59,35 @@ export default function ResultsPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="flex-1 p-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <h2 className="text-2xl font-bold">IOC Search Results — Submission #{submissionId}</h2>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-zinc-700 text-white rounded-md hover:bg-zinc-600 transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            Back to Home
-          </button>
+    <div className="flex flex-col min-h-screen bg-ink-950 text-ink-50 grain">
+      {/* Editorial header band — matches UploadPage/RepoPage */}
+      <header className="border-b border-hairline-strong vignette-deep">
+        <div className="max-w-7xl mx-auto px-6 pt-8 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
+          <div className="flex items-start gap-3">
+            <LeopardLogoCompact size={36} showText={false} />
+            <div>
+              <span className="eyebrow-amber">The Leopard · Field Console</span>
+              <h1 className="mt-2 font-serif italic text-5xl leading-none tracking-tight wordmark-gradient"
+                  style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
+                Results
+              </h1>
+              <p className="mt-2 font-mono text-micro text-ink-500 tracking-wider-2">
+                SUBMISSION · #{submissionId}
+              </p>
+            </div>
+          </div>
+          <nav className="flex items-center gap-2 flex-wrap" aria-label="Main navigation">
+            <button onClick={() => navigate('/')} className="btn-amber py-2">
+              Hunt
+            </button>
+            <button onClick={() => navigate('/repo')} className="btn-ghost py-2">
+              Repo
+            </button>
+          </nav>
         </div>
+      </header>
 
+      <div className="flex-1 max-w-7xl mx-auto p-6 w-full">
         {/* Error */}
         <ErrorAlert
           error={errorInfo.error}
@@ -82,30 +99,34 @@ export default function ResultsPage() {
 
         {/* Loading */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-16 text-zinc-400">
-            <svg className="animate-spin h-8 w-8 text-indigo-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+          <div className="flex flex-col items-center justify-center py-16 text-ink-300">
+            <svg className="animate-spin h-8 w-8 text-signal-amber mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <p>Loading results...</p>
+            <p className="font-mono text-micro uppercase tracking-eyebrow">Loading results…</p>
           </div>
         ) : results.length === 0 ? (
           /* Empty State */
-          <div className="text-center py-16 bg-zinc-900 rounded-lg border border-zinc-700">
-            <svg className="mx-auto h-12 w-12 text-zinc-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <div className="card-editorial text-center py-16">
+            <svg className="mx-auto h-12 w-12 text-ink-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-zinc-400 text-lg">No results found for this submission.</p>
-            <p className="text-zinc-500 text-sm mt-1">The search may not have returned any matches.</p>
+            <p className="text-ink-200 text-lg font-serif" style={{ fontVariationSettings: '"opsz" 60' }}>No results found for this submission.</p>
+            <p className="text-ink-500 text-xs mt-2 font-mono uppercase tracking-eyebrow">THE SEARCH MAY NOT HAVE RETURNED ANY MATCHES</p>
           </div>
         ) : (
-          <>
+          <section>
+            <span className="eyebrow">Section · Matches</span>
+
             {/* Action Bar */}
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-zinc-400">{results.length} result{results.length !== 1 ? 's' : ''} found</p>
+            <div className="mt-3 flex items-center justify-between mb-4">
+              <p className="font-mono text-micro uppercase tracking-eyebrow text-ink-400">
+                {results.length} result{results.length !== 1 ? 's' : ''} found
+              </p>
               <button
                 onClick={downloadCSV}
-                className="px-5 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
+                className="btn-amber py-2"
                 aria-label="Download results as CSV"
               >
                 Download CSV
@@ -113,33 +134,35 @@ export default function ResultsPage() {
             </div>
 
             {/* Results Table - Paginated */}
-            <div className="overflow-x-auto bg-zinc-900 border border-zinc-700 rounded-lg">
+            <div className="overflow-x-auto card-editorial">
               <table className="min-w-full text-sm" aria-label="IOC search results">
-                <thead className="bg-zinc-800/50 text-zinc-300">
-                  <tr>
-                    <th scope="col" className="text-left px-4 py-3 font-medium">IOC</th>
-                    <th scope="col" className="text-left px-4 py-3 font-medium">Type</th>
-                    <th scope="col" className="text-left px-4 py-3 font-medium">Hit</th>
-                    <th scope="col" className="text-left px-4 py-3 font-medium">Details</th>
+                <thead>
+                  <tr className="border-b border-hairline">
+                    <th scope="col" className="text-left px-4 py-3 font-mono text-micro uppercase tracking-eyebrow text-ink-400">IOC</th>
+                    <th scope="col" className="text-left px-4 py-3 font-mono text-micro uppercase tracking-eyebrow text-ink-400">Type</th>
+                    <th scope="col" className="text-left px-4 py-3 font-mono text-micro uppercase tracking-eyebrow text-ink-400">Hit</th>
+                    <th scope="col" className="text-left px-4 py-3 font-mono text-micro uppercase tracking-eyebrow text-ink-400">Details</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800">
+                <tbody>
                   {results.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((r) => (
-                    <tr key={r.id} className={`transition-colors ${r.hit ? 'bg-red-900/10 hover:bg-red-900/20' : 'hover:bg-zinc-800/50'}`}>
-                      <td className="px-4 py-3 font-mono text-sm text-zinc-200 break-all">{r.ioc}</td>
+                    <tr key={r.id} className={`border-b border-hairline last:border-b-0 transition-colors ${r.hit ? 'bg-signal-rust/5' : ''}`}>
+                      <td className="px-4 py-3 font-mono text-sm text-ink-100 break-all">{r.ioc}</td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-1 rounded text-xs bg-indigo-900/50 text-indigo-300 border border-indigo-700">{r.iocType}</span>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 font-mono uppercase text-micro tracking-wider-2 border border-signal-amber/40 text-signal-amber bg-signal-amber/10">
+                          {r.iocType}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 font-mono uppercase text-micro tracking-wider-2 border ${
                           r.hit
-                            ? 'bg-red-900/50 text-red-300 border border-red-700'
-                            : 'bg-green-900/50 text-green-300 border border-green-700'
+                            ? 'border-signal-rust/40 text-signal-rust bg-signal-rust/10'
+                            : 'border-signal-jade/40 text-signal-jade bg-signal-jade/10'
                         }`}>
                           {r.hit ? 'Hit' : 'No Hit'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-zinc-400 max-w-md truncate">{r.details}</td>
+                      <td className="px-4 py-3 text-ink-300 max-w-md truncate">{r.details}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -148,27 +171,27 @@ export default function ResultsPage() {
 
             {/* Pagination Controls */}
             {results.length > PAGE_SIZE && (
-              <div className="flex items-center justify-center gap-4 mt-4">
+              <div className="flex items-center justify-center gap-4 mt-6">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-4 py-2 bg-zinc-700 text-white rounded-md hover:bg-zinc-600 transition disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="btn-ghost py-2"
                 >
                   Previous
                 </button>
-                <span className="text-sm text-zinc-400">
+                <span className="font-mono text-micro uppercase tracking-eyebrow text-ink-400">
                   Page {currentPage} of {Math.ceil(results.length / PAGE_SIZE)}
                 </span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(Math.ceil(results.length / PAGE_SIZE), p + 1))}
                   disabled={currentPage >= Math.ceil(results.length / PAGE_SIZE)}
-                  className="px-4 py-2 bg-zinc-700 text-white rounded-md hover:bg-zinc-600 transition disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="btn-ghost py-2"
                 >
                   Next
                 </button>
               </div>
             )}
-          </>
+          </section>
         )}
       </div>
 

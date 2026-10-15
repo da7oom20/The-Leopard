@@ -208,128 +208,143 @@ export default function RepoPage() {
 
     const hitChipClass = (hit) =>
         hit === 'hit'
-            ? 'bg-red-900/50 text-red-300 border border-red-700'
+            ? 'border-signal-rust/40 text-signal-rust bg-signal-rust/10'
             : hit === 'error'
-                ? 'bg-amber-900/50 text-amber-300 border border-amber-700'
-                : 'bg-green-900/50 text-green-300 border border-green-700';
+                ? 'border-signal-warning/40 text-signal-warning bg-signal-warning/10'
+                : 'border-signal-jade/40 text-signal-jade bg-signal-jade/10';
     const hitLabel = (hit) =>
         hit === 'hit' ? 'Hit' : hit === 'error' ? 'Error' : 'No Hit';
 
     const hasActiveFilters = filterClient || filterType || filterHit || filterDateFrom || filterDateTo;
 
     return (
-        <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100">
-            <div className="flex-1 p-6">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                    <div className="flex items-center gap-3">
+        <div className="flex flex-col min-h-screen bg-ink-950 text-ink-50 grain">
+            {/* Editorial header band — matches UploadPage */}
+            <header className="border-b border-hairline-strong vignette-deep">
+                <div className="max-w-7xl mx-auto px-6 pt-8 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
+                    <div className="flex items-start gap-3">
                         <LeopardLogoCompact size={36} showText={false} />
                         <div>
-                            <h1 className="text-2xl font-bold text-zinc-100">Searches Repo</h1>
-                            <p className="text-zinc-400 text-xs">Search history and results</p>
+                            <span className="eyebrow-amber">The Leopard · Field Console</span>
+                            <h1 className="mt-2 font-serif italic text-5xl leading-none tracking-tight wordmark-gradient"
+                                style={{ fontVariationSettings: '"opsz" 144, "wght" 400' }}>
+                                Repo
+                            </h1>
+                            <p className="mt-2 font-mono text-micro text-ink-500 tracking-wider-2">
+                                SEARCH HISTORY · HUNTS BY CLIENT
+                            </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                            Back to Search
+                    <nav className="flex items-center gap-2 flex-wrap" aria-label="Main navigation">
+                        <button onClick={() => navigate('/')} className="btn-amber py-2">
+                            Hunt
                         </button>
-                        <button
-                            onClick={() => navigate('/admin')}
-                            className="px-4 py-2 rounded-md bg-zinc-700 text-white hover:bg-zinc-600 transition focus:outline-none focus:ring-2 focus:ring-zinc-500"
-                        >
-                            Admin Panel
+                        <button onClick={() => navigate('/admin')} className="btn-ghost py-2">
+                            Admin
                         </button>
-                    </div>
+                    </nav>
                 </div>
+            </header>
+
+            <div className="flex-1 max-w-7xl mx-auto p-6 w-full">
 
                 {/* Disclaimer */}
-                <div className="mb-4 p-3 bg-yellow-900/50 text-yellow-200 border border-yellow-700 rounded-md text-sm">
-                    <strong>Note:</strong> CSV exports contain a limited subset of results intended as a quick reference.
-                    Please review the full results directly in your SIEM for comprehensive data.
+                <div className="mb-6 p-3 border-l-2 border-signal-amber bg-signal-amber/8 border-y border-r border-y-hairline border-r-hairline">
+                    <p className="font-mono text-micro tracking-eyebrow text-signal-amber flex items-center gap-2">
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        NOTE · CSV EXPORT SUBSET
+                    </p>
+                    <p className="text-ink-300 text-xs mt-1.5 leading-relaxed">
+                        CSV exports contain a limited subset of results intended as a quick reference. Review the full results directly in your SIEM for comprehensive data.
+                    </p>
                 </div>
 
                 {/* Filters */}
-                <div className="mb-4 p-4 bg-zinc-900 border border-zinc-700 rounded-lg">
-                    <div className="flex flex-wrap gap-3 items-end">
-                        <div>
-                            <label htmlFor="filter-client" className="block text-xs text-zinc-400 mb-1">Client</label>
-                            <select
-                                id="filter-client"
-                                value={filterClient}
-                                onChange={e => setFilterClient(e.target.value)}
-                                className="p-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                                <option value="">All Clients</option>
-                                {filterOptions.clients.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
+                <section className="mb-6">
+                    <span className="eyebrow">Section · Filters</span>
+                    <div className="mt-3 card-editorial p-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
+                            <div>
+                                <label htmlFor="filter-client" className="font-mono text-xs uppercase tracking-eyebrow text-ink-400 block mb-2">Client</label>
+                                <select
+                                    id="filter-client"
+                                    value={filterClient}
+                                    onChange={e => setFilterClient(e.target.value)}
+                                    className="field-boxed"
+                                >
+                                    <option value="">All Clients</option>
+                                    {filterOptions.clients.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="filter-type" className="font-mono text-xs uppercase tracking-eyebrow text-ink-400 block mb-2">IOC Type</label>
+                                <select
+                                    id="filter-type"
+                                    value={filterType}
+                                    onChange={e => setFilterType(e.target.value)}
+                                    className="field-boxed"
+                                >
+                                    <option value="">All Types</option>
+                                    {filterOptions.filterTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="filter-hit" className="font-mono text-xs uppercase tracking-eyebrow text-ink-400 block mb-2">Status</label>
+                                <select
+                                    id="filter-hit"
+                                    value={filterHit}
+                                    onChange={e => setFilterHit(e.target.value)}
+                                    className="field-boxed"
+                                >
+                                    <option value="">All</option>
+                                    <option value="hit">Hit</option>
+                                    <option value="no hit">No Hit</option>
+                                    <option value="error">Error</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="filter-from" className="font-mono text-xs uppercase tracking-eyebrow text-ink-400 block mb-2">From</label>
+                                <input
+                                    id="filter-from"
+                                    type="date"
+                                    value={filterDateFrom}
+                                    onChange={e => setFilterDateFrom(e.target.value)}
+                                    className="field-boxed"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="filter-to" className="font-mono text-xs uppercase tracking-eyebrow text-ink-400 block mb-2">To</label>
+                                <input
+                                    id="filter-to"
+                                    type="date"
+                                    value={filterDateTo}
+                                    onChange={e => setFilterDateTo(e.target.value)}
+                                    className="field-boxed"
+                                />
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={applyFilters}
+                                    disabled={loading}
+                                    className="btn-amber py-2"
+                                >
+                                    Apply
+                                </button>
+                                {hasActiveFilters && (
+                                    <button
+                                        onClick={handleClear}
+                                        disabled={loading}
+                                        className="btn-ghost py-2"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <div>
-                            <label htmlFor="filter-type" className="block text-xs text-zinc-400 mb-1">IOC Type</label>
-                            <select
-                                id="filter-type"
-                                value={filterType}
-                                onChange={e => setFilterType(e.target.value)}
-                                className="p-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                                <option value="">All Types</option>
-                                {filterOptions.filterTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="filter-hit" className="block text-xs text-zinc-400 mb-1">Status</label>
-                            <select
-                                id="filter-hit"
-                                value={filterHit}
-                                onChange={e => setFilterHit(e.target.value)}
-                                className="p-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                                <option value="">All</option>
-                                <option value="hit">Hit</option>
-                                <option value="no hit">No Hit</option>
-                                <option value="error">Error</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="filter-from" className="block text-xs text-zinc-400 mb-1">From</label>
-                            <input
-                                id="filter-from"
-                                type="date"
-                                value={filterDateFrom}
-                                onChange={e => setFilterDateFrom(e.target.value)}
-                                className="p-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="filter-to" className="block text-xs text-zinc-400 mb-1">To</label>
-                            <input
-                                id="filter-to"
-                                type="date"
-                                value={filterDateTo}
-                                onChange={e => setFilterDateTo(e.target.value)}
-                                className="p-2 bg-zinc-800 border border-zinc-700 rounded-md text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                        </div>
-                        <button
-                            onClick={applyFilters}
-                            disabled={loading}
-                            className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                        >
-                            Apply
-                        </button>
-                        {hasActiveFilters && (
-                            <button
-                                onClick={handleClear}
-                                disabled={loading}
-                                className="px-4 py-2 rounded-md bg-zinc-700 text-zinc-300 hover:bg-zinc-600 transition text-sm focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:opacity-50"
-                            >
-                                Clear
-                            </button>
-                        )}
                     </div>
-                </div>
+                </section>
 
                 {/* Error Messages */}
                 <ErrorAlert
@@ -348,130 +363,138 @@ export default function RepoPage() {
                 />
 
                 {/* Grouped hunt cards */}
-                {items.length === 0 && !loading && (
-                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-12 text-center">
-                        <svg className="mx-auto h-10 w-10 text-zinc-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                        </svg>
-                        <p className="text-zinc-500">{hasActiveFilters ? 'No results match your filters.' : 'No search submissions yet.'}</p>
-                        <p className="text-zinc-600 text-xs mt-1">{hasActiveFilters ? 'Try adjusting or clearing the filters.' : 'Completed searches will appear here.'}</p>
-                    </div>
-                )}
+                <section>
+                    <span className="eyebrow">Section · Hunts</span>
 
-                <div className="space-y-4">
-                    {items.map(hunt => (
-                        <div key={hunt.huntId} className="bg-zinc-900 border border-zinc-700 rounded-lg overflow-hidden">
-                            {/* Hunt header */}
-                            <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                <div>
-                                    <div className="text-sm font-medium text-zinc-100 break-all">
-                                        {hunt.fileName || '(no file name)'}
-                                    </div>
-                                    <div className="text-xs text-zinc-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
-                                        <span>{new Date(hunt.createdAt).toLocaleString()}</span>
-                                        <span>{hunt.clients.length} client{hunt.clients.length !== 1 ? 's' : ''}</span>
-                                        {hunt.minutesBack != null && (
-                                            <span>window: {hunt.minutesBack} min</span>
-                                        )}
-                                        <span className="font-mono text-[0.65rem] text-zinc-600" title={hunt.huntId}>
-                                            hunt id: {hunt.huntId.length > 40 ? hunt.huntId.slice(0, 40) + '…' : hunt.huntId}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Per-client sections */}
-                            <div className="divide-y divide-zinc-800">
-                                {hunt.clients.map(c => (
-                                    <div key={c.client} className="px-4 py-3">
-                                        <div className="text-sm font-semibold text-zinc-200 mb-2 flex items-center gap-2">
-                                            <span>{c.client}</span>
-                                            <span className="text-xs font-normal text-zinc-500">({c.siemType || 'logrhythm'})</span>
-                                        </div>
-                                        <div className="overflow-x-auto">
-                                            <table className="min-w-full text-sm">
-                                                <thead className="text-zinc-400 text-xs uppercase tracking-wider">
-                                                    <tr>
-                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">IOC Type</th>
-                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">IOCs</th>
-                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">Status</th>
-                                                        <th scope="col" className="text-left py-1.5 pr-4 font-medium">Results</th>
-                                                        <th scope="col" className="text-right py-1.5 pl-4 font-medium">Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-zinc-800/60">
-                                                    {c.filters.map(f => (
-                                                        <tr key={f.resultId}>
-                                                            <td className="py-2 pr-4 text-zinc-200 whitespace-nowrap">{f.filterType || '-'}</td>
-                                                            <td className="py-2 pr-4 text-zinc-400">{f.iocCount}</td>
-                                                            <td className="py-2 pr-4">
-                                                                <span
-                                                                    className={`px-2 py-0.5 rounded text-xs font-medium ${hitChipClass(f.hit)}`}
-                                                                    title={f.hit === 'error' && f.errorMessage ? f.errorMessage : undefined}
-                                                                >
-                                                                    {hitLabel(f.hit)}
-                                                                </span>
-                                                            </td>
-                                                            <td className="py-2 pr-4 text-zinc-300">{f.resultCount}</td>
-                                                            <td className="py-2 pl-4 text-right whitespace-nowrap">
-                                                                <div className="inline-flex items-center gap-2">
-                                                                    <button
-                                                                        onClick={() => rerunFilter(f.resultId)}
-                                                                        disabled={rerunningId !== null}
-                                                                        className="px-2.5 py-1 rounded-md bg-zinc-700 text-zinc-100 hover:bg-zinc-600 transition text-xs focus:outline-none focus:ring-2 focus:ring-zinc-500 disabled:opacity-50 inline-flex items-center gap-1.5"
-                                                                        aria-label={`Re-run ${f.filterType} for ${c.client}`}
-                                                                        title={rerunningId === f.resultId ? 'Re-running…' : 'Re-run this search'}
-                                                                    >
-                                                                        {rerunningId === f.resultId && (
-                                                                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                                                            </svg>
-                                                                        )}
-                                                                        {rerunningId === f.resultId ? 'Running…' : 'Re-run'}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => downloadCsvForRow(f.resultId)}
-                                                                        disabled={downloadingId === f.resultId}
-                                                                        className="px-2.5 py-1 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                                                                        aria-label={`Download CSV for ${c.client} / ${f.filterType}`}
-                                                                        title="Download CSV"
-                                                                    >
-                                                                        {downloadingId === f.resultId ? '…' : 'CSV'}
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-
-                    {loading && (
-                        <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-6 text-center">
-                            <div className="flex items-center justify-center gap-2 text-zinc-400">
-                                <svg className="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                <span>Loading...</span>
-                            </div>
+                    {items.length === 0 && !loading && (
+                        <div className="mt-3 card-editorial px-4 py-12 text-center">
+                            <svg className="mx-auto h-10 w-10 text-ink-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            <p className="text-ink-300">{hasActiveFilters ? 'No results match your filters.' : 'No search submissions yet.'}</p>
+                            <p className="text-ink-500 text-xs mt-1 font-mono uppercase tracking-eyebrow">{hasActiveFilters ? 'TRY ADJUSTING OR CLEARING THE FILTERS' : 'COMPLETED SEARCHES WILL APPEAR HERE'}</p>
                         </div>
                     )}
-                </div>
+
+                    <div className="mt-3 space-y-5">
+                        {items.map(hunt => (
+                            <article key={hunt.huntId} className="card-editorial overflow-hidden animate-fade-up">
+                                {/* Hunt header */}
+                                <header className="px-5 py-4 border-b border-hairline bg-ink-900/40">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <span className="eyebrow-amber">Hunt</span>
+                                            <h2 className="mt-1 font-serif text-xl text-ink-50 leading-tight break-all" style={{ fontVariationSettings: '"opsz" 60' }}>
+                                                {hunt.fileName || '(no file name)'}
+                                            </h2>
+                                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-micro uppercase tracking-eyebrow text-ink-500">
+                                                <span>{new Date(hunt.createdAt).toLocaleString()}</span>
+                                                <span>{hunt.clients.length} client{hunt.clients.length !== 1 ? 's' : ''}</span>
+                                                {hunt.minutesBack != null && (
+                                                    <span>window · {hunt.minutesBack} min</span>
+                                                )}
+                                            </div>
+                                            <div className="mt-1 font-mono text-[0.65rem] text-ink-600 truncate" title={hunt.huntId}>
+                                                id · {hunt.huntId}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </header>
+
+                                {/* Per-client sections */}
+                                <div className="divide-y divide-hairline">
+                                    {hunt.clients.map(c => (
+                                        <div key={c.client} className="px-5 py-4">
+                                            <div className="mb-3 flex items-baseline gap-3 flex-wrap">
+                                                <h3 className="font-serif text-lg text-ink-100 leading-none" style={{ fontVariationSettings: '"opsz" 60' }}>
+                                                    {c.client}
+                                                </h3>
+                                                <span className="font-mono text-micro uppercase tracking-eyebrow text-ink-500">
+                                                    {c.siemType || 'logrhythm'}
+                                                </span>
+                                            </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b border-hairline">
+                                                            <th scope="col" className="text-left py-2 pr-4 font-mono text-micro uppercase tracking-eyebrow text-ink-400">IOC Type</th>
+                                                            <th scope="col" className="text-left py-2 pr-4 font-mono text-micro uppercase tracking-eyebrow text-ink-400">IOCs</th>
+                                                            <th scope="col" className="text-left py-2 pr-4 font-mono text-micro uppercase tracking-eyebrow text-ink-400">Status</th>
+                                                            <th scope="col" className="text-left py-2 pr-4 font-mono text-micro uppercase tracking-eyebrow text-ink-400">Results</th>
+                                                            <th scope="col" className="text-right py-2 pl-4 font-mono text-micro uppercase tracking-eyebrow text-ink-400">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {c.filters.map(f => (
+                                                            <tr key={f.resultId} className="border-b border-hairline last:border-b-0">
+                                                                <td className="py-2.5 pr-4 text-ink-100 whitespace-nowrap">{f.filterType || '-'}</td>
+                                                                <td className="py-2.5 pr-4 text-ink-300 tabular-nums">{f.iocCount}</td>
+                                                                <td className="py-2.5 pr-4">
+                                                                    <span
+                                                                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 font-mono uppercase text-micro tracking-wider-2 border ${hitChipClass(f.hit)}`}
+                                                                        title={f.hit === 'error' && f.errorMessage ? f.errorMessage : undefined}
+                                                                    >
+                                                                        {hitLabel(f.hit)}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="py-2.5 pr-4 text-ink-100 tabular-nums">{f.resultCount}</td>
+                                                                <td className="py-2.5 pl-4 text-right whitespace-nowrap">
+                                                                    <div className="inline-flex items-center gap-2">
+                                                                        <button
+                                                                            onClick={() => rerunFilter(f.resultId)}
+                                                                            disabled={rerunningId !== null}
+                                                                            className="btn-ghost py-1.5 px-3 text-xs"
+                                                                            aria-label={`Re-run ${f.filterType} for ${c.client}`}
+                                                                            title={rerunningId === f.resultId ? 'Re-running…' : 'Re-run this search'}
+                                                                        >
+                                                                            {rerunningId === f.resultId && (
+                                                                                <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                                                </svg>
+                                                                            )}
+                                                                            {rerunningId === f.resultId ? 'Running…' : 'Re-run'}
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => downloadCsvForRow(f.resultId)}
+                                                                            disabled={downloadingId === f.resultId}
+                                                                            className="btn-amber py-1.5 px-3 text-xs"
+                                                                            aria-label={`Download CSV for ${c.client} / ${f.filterType}`}
+                                                                            title="Download CSV"
+                                                                        >
+                                                                            {downloadingId === f.resultId ? '…' : 'CSV'}
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </article>
+                        ))}
+
+                        {loading && (
+                            <div className="card-editorial px-4 py-6 text-center">
+                                <div className="flex items-center justify-center gap-2 text-ink-300">
+                                    <svg className="animate-spin h-5 w-5 text-signal-amber" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    <span className="font-mono text-micro uppercase tracking-eyebrow">Loading…</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </section>
 
                 {/* Pagination */}
-                <div className="mt-4 flex justify-center gap-4">
+                <div className="mt-6 flex justify-center gap-4">
                     {hasMore && !loading && (
-                        <button
-                            onClick={() => loadPage(offset)}
-                            className="px-5 py-2 rounded-md bg-zinc-700 text-white hover:bg-zinc-600 transition focus:outline-none focus:ring-2 focus:ring-zinc-500"
-                        >
+                        <button onClick={() => loadPage(offset)} className="btn-ghost py-2">
                             Load More
                         </button>
                     )}
@@ -479,9 +502,9 @@ export default function RepoPage() {
 
                 {/* Summary */}
                 {items.length > 0 && (
-                    <p className="text-center text-zinc-500 text-xs mt-3">
+                    <p className="text-center text-ink-500 text-xs mt-3 font-mono uppercase tracking-eyebrow">
                         Showing {items.length} hunt{items.length !== 1 ? 's' : ''}
-                        {hasMore ? ' (more available)' : ''}
+                        {hasMore ? ' · more available' : ''}
                     </p>
                 )}
             </div>
