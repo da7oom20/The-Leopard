@@ -956,36 +956,72 @@ async function logsDigging(iocGroups, fileName, email, minutesBack, apiKeys, onP
             entityIds = cfg.entityIds;
           }
         } catch (e) { /* ignore malformed extraConfig */ }
-        const query = adapter.buildQuery(filterType, iocs, { minutesBack, logSourceListId, logSources, entityIds, customFields, customQueryTemplate });
-        const searchResult = await adapter.executeSearch(query);
+        const buildOptions = { minutesBack, logSourceListId, logSources, entityIds, customFields, customQueryTemplate };
 
         let finalResults = [];
-        if (searchResult.taskId && !searchResult.complete) {
-          const pollingInterval = adapter.getPollingInterval(minutesBack);
-          const maxAttempts = adapter.getRetryLimit(minutesBack);
-          log.debug('polling for async results', {
-            client: apiKeyObj.client,
-            siemType,
-            filterType,
-            taskId: searchResult.taskId,
-            intervalMs: pollingInterval,
-            maxAttempts
-          });
-          const pollResult = await adapter.pollResults(searchResult.taskId, { pollingInterval, maxAttempts });
-          if (pollResult.status === 'complete') {
-            finalResults = pollResult.results || [];
-          } else {
-            log.warn('poll did not complete', {
+        if (typeof adapter.search === 'function') {
+          // Preferred path. The adapter owns chunking (for payload-size
+          // limits), execute, and poll. On LogRhythm this fixes HTTP 413
+          // for large Domain/URL/FileName/Email searches.
+          const result = await adapter.search(filterType, iocs, buildOptions);
+          finalResults = result.results || [];
+          if (result.chunked) {
+            log.info('search executed in chunks', {
               client: apiKeyObj.client,
               siemType,
               filterType,
-              status: pollResult.status,
-              reason: pollResult.error,
-              hint: pollResult.status === 'timeout' ? 'Try a smaller time window or fewer IOCs.' : undefined
+              chunks: result.chunkCount,
+              partialErrors: result.chunkErrors?.length || 0
+            });
+            if (result.chunkErrors?.length) {
+              log.warn('partial chunk failures', {
+                client: apiKeyObj.client,
+                siemType,
+                filterType,
+                errors: result.chunkErrors
+              });
+            }
+          } else if (result.status !== 'complete') {
+            log.warn('search did not complete', {
+              client: apiKeyObj.client,
+              siemType,
+              filterType,
+              status: result.status,
+              reason: result.error,
+              hint: result.status === 'timeout' ? 'Try a smaller time window or fewer IOCs.' : undefined
             });
           }
         } else {
-          finalResults = searchResult.results || [];
+          const query = adapter.buildQuery(filterType, iocs, buildOptions);
+          const searchResult = await adapter.executeSearch(query);
+
+          if (searchResult.taskId && !searchResult.complete) {
+            const pollingInterval = adapter.getPollingInterval(minutesBack);
+            const maxAttempts = adapter.getRetryLimit(minutesBack);
+            log.debug('polling for async results', {
+              client: apiKeyObj.client,
+              siemType,
+              filterType,
+              taskId: searchResult.taskId,
+              intervalMs: pollingInterval,
+              maxAttempts
+            });
+            const pollResult = await adapter.pollResults(searchResult.taskId, { pollingInterval, maxAttempts });
+            if (pollResult.status === 'complete') {
+              finalResults = pollResult.results || [];
+            } else {
+              log.warn('poll did not complete', {
+                client: apiKeyObj.client,
+                siemType,
+                filterType,
+                status: pollResult.status,
+                reason: pollResult.error,
+                hint: pollResult.status === 'timeout' ? 'Try a smaller time window or fewer IOCs.' : undefined
+              });
+            }
+          } else {
+            finalResults = searchResult.results || [];
+          }
         }
 
         const searchDuration = Date.now() - startTime;

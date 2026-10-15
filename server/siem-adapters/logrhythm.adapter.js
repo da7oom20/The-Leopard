@@ -767,6 +767,93 @@ class LogRhythmAdapter extends BaseSiemAdapter {
   }
 
   /**
+   * High-level search entry point. Handles chunking for string-group
+   * filters (Domain / URL / Email / FileName) whose payload would exceed
+   * LR's HTTP body limit (observed HTTP 413 at ~124 domains × 4-field
+   * fan-out). Falls through to a single buildQuery → executeSearch →
+   * pollResults for every other case so IP/Hash behavior is unchanged.
+   *
+   * @param {string} filterType - Normalized IOC type (IP|Hash|Domain|URL|Email|FileName)
+   * @param {string[]} values - Deobfuscated IOC values
+   * @param {Object} options - Same options as buildQuery; also honored:
+   *   - minutesBack (used to derive polling interval + retry limit)
+   * @returns {Promise<{status, results, chunked, chunkCount?, chunkErrors?}>}
+   */
+  async search(filterType, values, options = {}) {
+    const STRING_GROUP = new Set(['Domain', 'URL', 'Email', 'FileName']);
+    const CHUNK_SIZE = 25;
+    const MAX_RESULTS = 50;
+
+    const minutesBack = options.minutesBack || 5;
+    const polling = {
+      pollingInterval: this.getPollingInterval(minutesBack),
+      maxAttempts: this.getRetryLimit(minutesBack)
+    };
+
+    const runOne = async (chunkValues) => {
+      const query = this.buildQuery(filterType, chunkValues, options);
+      const task = await this.executeSearch(query);
+      if (task.complete) {
+        return { status: 'complete', results: task.results || [] };
+      }
+      return this.pollResults(task.taskId, polling);
+    };
+
+    const needsChunking = STRING_GROUP.has(filterType)
+      && Array.isArray(values)
+      && values.length > CHUNK_SIZE;
+
+    if (!needsChunking) {
+      const r = await runOne(values);
+      return {
+        status: r.status,
+        results: r.results || [],
+        error: r.error,
+        chunked: false
+      };
+    }
+
+    const chunks = [];
+    for (let i = 0; i < values.length; i += CHUNK_SIZE) {
+      chunks.push(values.slice(i, i + CHUNK_SIZE));
+    }
+    console.log(`[LR] chunking ${filterType} search: ${values.length} values → ${chunks.length} chunks of ≤${CHUNK_SIZE}`);
+
+    const merged = [];
+    const chunkErrors = [];
+    for (let i = 0; i < chunks.length; i++) {
+      if (merged.length >= MAX_RESULTS) {
+        console.log(`[LR] stopping chunking early — ${MAX_RESULTS}-item cap reached at chunk ${i}/${chunks.length}`);
+        break;
+      }
+      try {
+        const r = await runOne(chunks[i]);
+        if (r.status === 'complete' && Array.isArray(r.results)) {
+          merged.push(...r.results);
+        } else {
+          chunkErrors.push(`chunk ${i + 1}/${chunks.length}: ${r.error || r.status}`);
+        }
+      } catch (err) {
+        chunkErrors.push(`chunk ${i + 1}/${chunks.length}: ${err.message}`);
+      }
+    }
+
+    // All chunks failed → propagate so the route stores the result as error
+    // (rather than silently returning zero items as a "no hit").
+    if (merged.length === 0 && chunkErrors.length === chunks.length) {
+      throw new Error(`LogRhythm search failed on all ${chunks.length} chunks: ${chunkErrors.join('; ')}`);
+    }
+
+    return {
+      status: 'complete',
+      results: merged.slice(0, MAX_RESULTS),
+      chunked: true,
+      chunkCount: chunks.length,
+      chunkErrors: chunkErrors.length > 0 ? chunkErrors : undefined
+    };
+  }
+
+  /**
    * Execute search in LogRhythm (async - returns taskId)
    */
   async executeSearch(query, options = {}) {
